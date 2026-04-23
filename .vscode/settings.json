@@ -1,0 +1,6 @@
+{
+    "rust-analyzer.check.command": "clippy",
+    "rust-analyzer.editor.formatOnSave": true,
+    "rust-analyzer.procMacro.enable": true,
+    "editor.semanticHighlighting.enabled": true
+}
