@@ -1,6 +1,16 @@
 # Compilación y artefactos de Rust
 /target
-Cargo.lock
+# Cargo.lock se suele subir en aplicaciones, pero si se prefiere ignorar:
+# Cargo.lock
+
+# Antigravity / AI Agent (Contexto local)
+.gemini/
+.agents/
+
+# Secretos y Entorno
+.env
+.env.*
+!.env.example
 
 # Archivos de VS Code
 .vscode/*
@@ -8,6 +18,15 @@ Cargo.lock
 !.vscode/tasks.json
 !.vscode/launch.json
 !.vscode/extensions.json
+*.code-workspace
+
+# Otros Editores
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
 
 # Archivos de Sistema
 .DS_Store
@@ -16,4 +35,4 @@ Thumbs.db
 
 # Archivos temporales de edición
 *.rs.bk
-*.swp
+*~
