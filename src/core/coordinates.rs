@@ -84,50 +84,21 @@ pub fn normalize_position(
     local: &mut LocalPosition,
     sector_size: f64,
 ) {
-    let half = sector_size * 0.5_f64;
+    let shift_x = (local.0.x / sector_size).round();
+    let shift_y = (local.0.y / sector_size).round();
+    let shift_z = (local.0.z / sector_size).round();
 
-    let axes = [
-        (local.0.x, 0),
-        (local.0.y, 1),
-        (local.0.z, 2),
-    ];
-
-    for &(value, axis) in &axes {
-        if value > half {
-            let sectors_to_shift = ((value + half) / sector_size).floor() as i64;
-            match axis {
-                0 => {
-                    sector.0.x += sectors_to_shift;
-                    local.0.x -= sectors_to_shift as f64 * sector_size;
-                }
-                1 => {
-                    sector.0.y += sectors_to_shift;
-                    local.0.y -= sectors_to_shift as f64 * sector_size;
-                }
-                2 => {
-                    sector.0.z += sectors_to_shift;
-                    local.0.z -= sectors_to_shift as f64 * sector_size;
-                }
-                _ => unreachable!(),
-            }
-        } else if value < -half {
-            let sectors_to_shift = ((-value + half) / sector_size).floor() as i64;
-            match axis {
-                0 => {
-                    sector.0.x -= sectors_to_shift;
-                    local.0.x += sectors_to_shift as f64 * sector_size;
-                }
-                1 => {
-                    sector.0.y -= sectors_to_shift;
-                    local.0.y += sectors_to_shift as f64 * sector_size;
-                }
-                2 => {
-                    sector.0.z -= sectors_to_shift;
-                    local.0.z += sectors_to_shift as f64 * sector_size;
-                }
-                _ => unreachable!(),
-            }
-        }
+    if shift_x != 0.0 {
+        sector.0.x += shift_x as i64;
+        local.0.x -= shift_x * sector_size;
+    }
+    if shift_y != 0.0 {
+        sector.0.y += shift_y as i64;
+        local.0.y -= shift_y * sector_size;
+    }
+    if shift_z != 0.0 {
+        sector.0.z += shift_z as i64;
+        local.0.z -= shift_z * sector_size;
     }
 }
 
@@ -165,7 +136,8 @@ mod tests {
     #[test]
     fn test_normalize_wraps_sector() {
         let mut sector = Sector::ORIGIN;
-        let mut local = LocalPosition::new(1.5e12, 0.0, 0.0);
+        // 1.2e12 is clearly in Sector 1 (since Sector 0 is [-0.5e12, 0.5e12] and Sector 1 is [0.5e12, 1.5e12])
+        let mut local = LocalPosition::new(1.2e12, 0.0, 0.0);
         normalize_position(&mut sector, &mut local, SECTOR_SIZE);
 
         assert_eq!(sector.0.x, 1);
@@ -175,7 +147,7 @@ mod tests {
     #[test]
     fn test_normalize_negative_wraps() {
         let mut sector = Sector::ORIGIN;
-        let mut local = LocalPosition::new(-1.5e12, 0.0, 0.0);
+        let mut local = LocalPosition::new(-1.2e12, 0.0, 0.0);
         normalize_position(&mut sector, &mut local, SECTOR_SIZE);
 
         assert_eq!(sector.0.x, -1);
