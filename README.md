@@ -1,59 +1,96 @@
 
-# Universal Physics Engine
+# phys-rs — Universal Physics Engine
 
-A high-performance, deterministic physics simulation framework implemented in Rust. This project focuses on data-oriented design and hardware-accelerated computing to simulate complex celestial mechanics and fluid dynamics.
+A high-performance, deterministic physics simulation engine written in Rust. Designed to simulate physical phenomena from particle collisions to galaxy formation — all in double precision, all from first principles.
 
-## Core Architecture
+## Architecture
 
-The engine is built upon the **Entity Component System (ECS)** pattern, ensuring high cache locality and efficient parallel processing of large-scale simulations.
+**Engine-first design:** The physics engine is a pure simulation library with zero visual dependencies. It runs headlessly, is fully testeable with `cargo test`, and produces deterministic results across platforms.
+
+**Sandbox layer:** An interactive visual playground built on top of the engine using `wgpu` + `winit`. Provides real-time 3D rendering, camera controls, debug tools, and pre-built scenarios.
 
 ### Technical Stack
 
-- **Engine Core:** `bevy_ecs` for decoupled logic and data management.
-- **Linear Algebra:** `glam` for SIMD-optimized vector and matrix operations.
-- **Numerical Integration:** Support for Higher-order Runge-Kutta (RK4) and Velocity Verlet schemes.
-- **Graphics API:** `wgpu` (WebGPU) for cross-platform, hardware-accelerated rendering via instanced draws.
-- **Windowing:** `winit` for native event handling.
+| Layer | Technology | Purpose |
+|---|---|---|
+| **ECS** | `bevy_ecs` | Entity Component System for data-oriented physics |
+| **Math** | `glam` (DVec3/DQuat) + `nalgebra` (Matrix3) | SIMD-optimized f64 linear algebra |
+| **Collision** | `parry3d-f64` + `kiddo` | Narrow-phase manifolds + K-D tree broadphase |
+| **GPU** | `wgpu` + `encase` | Compute shaders + buffer marshalling |
+| **Window** | `winit` | Cross-platform windowing and input |
 
-## System Modules
+## Engine Capabilities
 
-### 1. Physics & Dynamics
+### Dynamics & Forces
+- N-body gravitation (brute-force + Barnes-Hut O(N log N))
+- Rigid body dynamics with full inertia tensors
+- Collision detection and impulse resolution
+- Electrostatics (Coulomb) and magnetism (Lorentz force)
 
-Implementation of N-body gravitational interactions and collision manifolds. The system is designed to handle:
+### Fluid Simulation
+- Smoothed Particle Hydrodynamics (SPH) with multiple kernels
+- Monaghan artificial viscosity for shock stability
+- Magnetohydrodynamics (MHD) for stellar plasmas
 
-- Universal Gravitation with customizable G constants.
-- Linear and angular momentum conservation.
-- Atmospheric drag models and fluid-particle interactions (SPH).
+### Thermodynamics
+- Heat conduction (Fourier's law)
+- Blackbody radiation (Stefan-Boltzmann)
+- Ideal gas and Tait equations of state
 
-### 2. Spatial Partitioning
+### Advanced Physics
+- Relativistic momentum corrections
+- Schwarzschild geodesics for photon paths
+- NFW dark matter halo profiles
+- Nuclear astrophysics: fusion rates, degeneracy pressure, stellar lifecycle
 
-To maintain $O(n \log n)$ complexity in large environments, the engine utilizes:
+### Numerical Methods
+- Semi-Implicit Euler, Velocity Verlet, RK4 integrators
+- Fixed-timestep accumulator for determinism
+- Softened force laws to prevent singularities
+- IEEE 754 f64 precision throughout
 
-- **Octrees:** For efficient spatial queries and gravitational approximations.
-- **Barnes-Hut Algorithm:** For accelerated N-body calculations.
+## Sandbox Scenarios
 
-### 3. Rendering Pipeline
-
-- Procedural geometry generation.
-- Modern programmable shading for density and temperature visualization.
-- High-buffer throughput for massive particle counts.
+Pre-built interactive demonstrations:
+- 🌍 Solar System — real ephemeris data
+- ⭐ Binary Star + circumbinary planet
+- 🌀 Galaxy formation with dark matter halos
+- 🔥 Star formation from SPH gas cloud collapse
+- 💧 Fluid playground (dam break, vortex rings)
+- 🕳️ Black hole accretion with gravitational lensing
+- 💫 Supernova shockwave propagation
+- 🎲 Three-body chaos with Lyapunov divergence
+- *...and more*
 
 ## Development
 
 ### Prerequisites
 
-- Rust Toolchain (Stable)
-- Vulkan/DirectX12/Metal compatible hardware
+- Rust Toolchain (Stable, edition 2024)
+- Vulkan / DirectX 12 / Metal compatible GPU
 
-### Build Instructions
+### Build & Run
 
 ```bash
 # Debug build
 cargo build
 
-# Optimized release build
-cargo build --release
-
-# Execution
+# Run with all features
 cargo run --release
+
+# Run with nuclear astrophysics
+cargo run --release --features nuclear
+
+# Run tests
+cargo test
+
+# Run benchmarks
+cargo bench
 ```
+
+## Documentation
+
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — Module structure, dependencies, design constraints
+- [`docs/PHYSICS_MASTER_INDEX.md`](docs/PHYSICS_MASTER_INDEX.md) — Canonical equations for all physics systems
+- [`docs/BACKLOG.md`](docs/BACKLOG.md) — Complete engineering task backlog
+- [`docs/ROADMAP.md`](docs/ROADMAP.md) — High-level phase objectives and deliverables

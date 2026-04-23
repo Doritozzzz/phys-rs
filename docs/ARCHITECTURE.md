@@ -1,72 +1,90 @@
-# Universal Physics Engine: Architecture Reference
+# Engineering Architecture
 
-This document outlines the Data-Oriented Design (DOD) architecture for `phys-rs`, enabling an "Infinity Sandbox" scale without floating-point precision loss.
+## 1. Core Paradigm
 
-## 1. The Hierarchical Floating Origin System
+- **Pattern:** Entity Component System (ECS).
+- **Library:** `bevy_ecs` (standalone — NOT the full Bevy engine).
+- **Constraint:** Logic must be strictly separated from data. Systems process Components; Entities are unique identifiers.
+- **Engine/Sandbox Separation:** The physics engine (`core/`, `components/`, `physics/`, `gpu/`) produces zero visual output. The sandbox (`render/`) consumes the engine as a library for interactive visualization.
 
-To prevent floating-point drift at astronomical distances, the engine employs a dual-coordinate hierarchical system.
+## 2. Mathematical Standards
 
-### Coordinate Types
+- **Precision:** Double Precision Floating Point (`f64`) for all physical calculations.
+- **Library:** `glam` (`DVec3`, `DQuat`). `nalgebra` only for advanced operations (`Matrix3`, eigenvalues).
+- **Units:** International System of Units (SI).
+  - Distance: Meters (m)
+  - Mass: Kilograms (kg)
+  - Time: Seconds (s)
+  - Force: Newtons (N)
+  - Energy: Joules (J)
+  - Temperature: Kelvin (K)
 
-- **Sector (`i128`)**: Defines a rigid, absolute grid cell in the universe. The scale of a sector is configurable (defaulting to 1 Light Year, $9.46 \times 10^{15}$ meters) via the `UniverseConfig` resource.
-- **Local (`DVec3`)**: An `f64` 3D vector representing the precise position of an entity *relative to the center of its current Sector*.
+## 3. Simulation Integrity
 
-```rust
-use bevy_ecs::prelude::*;
-use glam::DVec3;
+- **Time Management:** Fixed Timestep execution (accumulator pattern).
+- **Determinism:** The simulation state must be reproducible given the same initial conditions and delta-time.
+- **Memory:** Data-Oriented Design (DOD) — flat components, tight iteration, cache-friendly layouts.
+- **Numerical Safety:** Softened force denominators, `debug_assert!` finiteness checks, ordered iteration (no `HashMap`).
 
-// Configurable sector grid size
-#[derive(Resource)]
-pub struct UniverseConfig {
-    pub sector_size_meters: f64, 
-}
+## 4. Module Structure
 
-#[derive(Component)]
-pub struct Sector {
-    pub x: i128,
-    pub y: i128,
-    pub z: i128,
-}
-
-#[derive(Component)]
-pub struct LocalPosition(pub DVec3);
+```
+src/
+├── main.rs              # Entry point: World, Schedule, timestep loop
+├── core/                # Foundational types and configuration
+│   ├── mod.rs
+│   ├── config.rs        # UniverseConfig resource (G, ε, dt, θ, integrator)
+│   ├── time.rs          # SimulationTime resource (fixed dt, tick counter, accumulator)
+│   ├── coordinates.rs   # Sector(i64) + LocalPosition(DVec3) dual-coordinate system
+│   └── constants.rs     # Physical constants (G, c, k_B, σ, ε₀, μ₀, h, e)
+├── components/          # All ECS Component definitions (data only, no logic)
+│   ├── mod.rs
+│   ├── dynamics.rs      # Mass, Velocity, Acceleration, Force, PreviousAcceleration, LinearMomentum
+│   ├── spatial.rs       # WorldPosition, BoundingRadius
+│   ├── rotational.rs    # AngularVelocity, Orientation, Torque, InertiaTensor
+│   ├── material.rs      # Temperature, Charge, Density, Luminosity, Opacity
+│   ├── thermal.rs       # InternalEnergy, HeatCapacity, ThermalConductivity
+│   ├── electromagnetic.rs # ElectricField, MagneticField
+│   ├── sph.rs           # SmoothedDensity, Pressure, SmoothingRadius
+│   └── identifiers.rs   # EntityName, BodyType
+├── physics/             # All physics systems (logic only, no data definitions)
+│   ├── mod.rs
+│   ├── forces.rs        # Force/Torque accumulator reset
+│   ├── gravity.rs       # N-body brute-force gravitation
+│   ├── gravity_tree.rs  # Barnes-Hut octree approximation
+│   ├── integrators.rs   # Semi-Implicit Euler, Velocity Verlet, RK4
+│   ├── origin.rs        # Origin shift & sector boundary crossing
+│   ├── broadphase.rs    # K-D tree spatial partitioning (kiddo)
+│   ├── collisions.rs    # Narrow-phase manifolds + impulse resolution (parry3d-f64)
+│   ├── rigid_body.rs    # Inertia tensors, torque, angular dynamics
+│   ├── sph.rs           # SPH density, pressure, viscosity, artificial viscosity
+│   ├── thermodynamics.rs # Heat transfer, radiation, gas law
+│   └── electrostatics.rs # Coulomb, Lorentz, MHD
+├── gpu/                 # GPU compute pipeline (wgpu + encase)
+│   ├── mod.rs
+│   ├── buffers.rs       # StorageBuffer wrappers for ECS↔GPU marshalling
+│   └── pipeline.rs      # Compute pipeline abstraction, shader dispatch
+└── render/              # SANDBOX: Visual layer (winit + wgpu rendering)
+    ├── mod.rs
+    └── pipeline.rs      # Render pipeline, camera, instanced draws
 ```
 
-### The OriginShift System
-An observer (camera or focus entity) tracks the origin. When the observer's `LocalPosition` exceeds a configured threshold (e.g., `sector_size_meters / 2.0`), the system:
-1. Calculates the offset to the new sector.
-2. Updates the observer's `Sector`.
-3. Subtracts the offset from the `LocalPosition` of *all active entities* within physics range.
-4. Updates the `Sector` index for any entities that crossed the boundary.
+## 5. Dependency Map
 
-## 2. GPGPU State Persistence (Compute Sync)
+| Crate | Purpose | Module |
+|---|---|---|
+| `bevy_ecs` | ECS framework (Components, Systems, Resources, Schedules) | all |
+| `glam` | `DVec3`/`DQuat` for physics, `Vec3` for GPU vertex data only | `core/`, `components/`, `physics/` |
+| `nalgebra` | Inertia tensors (`Matrix3`), eigenvalues, matrix inversion | `physics/` |
+| `wgpu` | GPU compute shaders + render pipeline | `gpu/`, `render/` |
+| `encase` | `StorageBuffer` serialization for ECS→GPU transfer | `gpu/` |
+| `kiddo` | K-D tree spatial partitioning for neighbor queries | `physics/broadphase` |
+| `parry3d-f64` | Collision shapes, contact manifold generation (f64 only) | `physics/collisions` |
+| `winit` | Window creation and OS event loop | `render/` |
 
-Physics integration occurs on the GPU using `wgpu` compute shaders to handle millions of particles (SPH) and N-Body mechanics.
+## 6. Feature Gates
 
-### Memory Layout & Data Oriented Design
-We use the `encase` crate to guarantee that Rust's ECS structs perfectly align with WGSL `StorageBuffers`.
-
-- **Source of Truth**: The GPU VRAM holds the definitive physics state (Position, Velocity, Mass).
-- **ECS Role**: The `bevy_ecs` instance on the CPU acts as the "Director". It dispatches commands, handles broad-phase sector logic, and manages input/AI.
-- **Synchronization**: We only read back data from the GPU to the CPU when absolutely necessary (e.g., origin shifts across sectors, or user queries). For rendering, `wgpu` directly uses the physics buffers, maintaining zero-copy rendering.
-
-```rust
-// Example Encase alignment for WGSL
-use encase::ShaderType;
-use glam::DVec3;
-
-#[derive(ShaderType)]
-pub struct GpuPhysicsData {
-    pub local_pos: DVec3,
-    pub velocity: DVec3,
-    pub mass: f64,
-    // Padding managed by encase
-}
-```
-
-## 3. Spatial Partitioning
-
-- **Broad-Phase**: Grid-based hashing based on `Sector`.
-- **Narrow-Phase / Local Space**: 
-    - `kiddo` (K-D Trees) for hyper-fast SPH nearest-neighbor searches.
-    - `parry3d-f64` (BVH) for complex rigid-body manifold generation.
+| Feature Flag | Modules Enabled | Purpose |
+|---|---|---|
+| `nuclear` | Nuclear astrophysics systems | Stellar lifecycle, fusion, degeneracy pressure |
+| *(default)* | Everything except `nuclear` | Core engine + sandbox |
