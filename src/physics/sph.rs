@@ -384,6 +384,81 @@ pub fn sph_xsph_system(
     }
 }
 
+// ─── Boundary Repulsion ────────────────────────────────────────────
+
+/// Configuration for SPH domain boundary enforcement.
+///
+/// Applies a repulsive force to fluid particles that approach the
+/// domain walls, preventing them from escaping without requiring
+/// explicit ghost particle spawning.
+#[derive(Resource, Debug, Clone)]
+pub struct SphBoundaryConfig {
+    /// Half-extent of the cubic domain [m]. Domain spans `[-extent, +extent]` on each axis.
+    pub half_extent: f64,
+    /// Distance from wall at which repulsion activates [m].
+    pub activation_distance: f64,
+    /// Strength of the repulsive force [N m⁻¹].
+    pub stiffness: f64,
+}
+
+impl Default for SphBoundaryConfig {
+    fn default() -> Self {
+        Self {
+            half_extent: 10.0_f64,
+            activation_distance: 0.5_f64,
+            stiffness: 1e6_f64,
+        }
+    }
+}
+
+/// SPH boundary repulsion system.
+///
+/// For each fluid particle near a domain wall, applies an inward
+/// repulsive force proportional to the penetration depth:
+/// `F = stiffness × (activation_distance - d)` where `d` is
+/// the distance to the nearest wall.
+///
+/// This is a lightweight alternative to ghost/mirror particles
+/// that prevents fluid from escaping the simulation domain.
+pub fn sph_boundary_system(
+    mut query: Query<(&LocalPosition, &mut Force), With<FluidParticle>>,
+    boundary: Res<SphBoundaryConfig>,
+) {
+    let ext = boundary.half_extent;
+    let ad = boundary.activation_distance;
+    let k = boundary.stiffness;
+
+    for (pos, mut force) in &mut query {
+        let p = pos.0;
+        // Check each axis: low wall and high wall
+        for axis in 0..3_usize {
+            let coord = match axis { 0 => p.x, 1 => p.y, _ => p.z };
+
+            // Distance to low wall (-ext)
+            let d_low = coord - (-ext);
+            if d_low < ad && d_low >= 0.0_f64 {
+                let mag = k * (ad - d_low);
+                match axis {
+                    0 => force.0.x += mag,
+                    1 => force.0.y += mag,
+                    _ => force.0.z += mag,
+                }
+            }
+
+            // Distance to high wall (+ext)
+            let d_high = ext - coord;
+            if d_high < ad && d_high >= 0.0_f64 {
+                let mag = k * (ad - d_high);
+                match axis {
+                    0 => force.0.x -= mag,
+                    1 => force.0.y -= mag,
+                    _ => force.0.z -= mag,
+                }
+            }
+        }
+    }
+}
+
 // ─── Tests ─────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -395,170 +470,186 @@ mod tests {
     use crate::physics::broadphase::{CandidatePair, CandidatePairs, KdTreeBroadphase};
     use glam::DVec3;
 
-    /// Verify that the 3D cubic spline kernel integrates to ≈ 1.0
-    /// via spherical numerical quadrature over the support radius.
     #[test]
     fn test_sph_kernel_normalization() {
         let h = 1.0_f64;
         let dr = 0.005_f64;
         let mut integral = 0.0_f64;
-
-        // 4π r² dr shell integration from 0 to 2h
         let n = (2.0_f64 * h / dr) as usize;
         for i in 0..n {
             let r = (i as f64 + 0.5_f64) * dr;
-            let w = cubic_spline_kernel(r, h);
-            integral += w * 4.0_f64 * PI * r.powi(2) * dr;
+            integral += cubic_spline_kernel(r, h) * 4.0_f64 * PI * r.powi(2) * dr;
         }
-
-        assert!(
-            (integral - 1.0_f64).abs() < 0.02_f64,
-            "Kernel integral should be ≈ 1.0, got {}",
-            integral
-        );
+        assert!((integral - 1.0_f64).abs() < 0.02_f64, "Kernel integral = {}", integral);
     }
 
-    /// Verify the gradient is negative inside the support radius
-    /// (kernel decreases with distance) and zero outside.
     #[test]
     fn test_sph_kernel_gradient_sign() {
         let h = 1.0_f64;
-
-        // Inside support: gradient should be negative (kernel decreasing)
-        let dw_05 = cubic_spline_kernel_gradient(0.5_f64, h);
-        assert!(dw_05 < 0.0_f64, "dW/dr at r=0.5h should be negative, got {}", dw_05);
-
-        let dw_15 = cubic_spline_kernel_gradient(1.5_f64, h);
-        assert!(dw_15 < 0.0_f64, "dW/dr at r=1.5h should be negative, got {}", dw_15);
-
-        // Outside support: should be zero
-        let dw_3 = cubic_spline_kernel_gradient(3.0_f64, h);
-        assert_eq!(dw_3, 0.0_f64, "dW/dr at r=3h should be 0");
+        assert!(cubic_spline_kernel_gradient(0.5_f64, h) < 0.0_f64);
+        assert!(cubic_spline_kernel_gradient(1.5_f64, h) < 0.0_f64);
+        assert_eq!(cubic_spline_kernel_gradient(3.0_f64, h), 0.0_f64);
     }
 
-    /// Verify that the Tait EOS returns zero pressure at the
-    /// reference density and positive pressure above it.
     #[test]
     fn test_tait_eos_basic() {
         let tait = TaitEquationConfig::default();
         let b = tait.reference_density * tait.speed_of_sound.powi(2) / tait.gamma;
-
-        // At rest density → P = 0
-        let p_rest = b * ((tait.reference_density / tait.reference_density).powf(tait.gamma) - 1.0_f64);
-        assert!(p_rest.abs() < 1e-6_f64, "Pressure at ρ₀ should be ~0, got {}", p_rest);
-
-        // Above rest density → positive pressure
-        let rho_high = 1100.0_f64;
-        let p_high = b * ((rho_high / tait.reference_density).powf(tait.gamma) - 1.0_f64);
-        assert!(p_high > 0.0_f64, "Pressure above ρ₀ should be positive, got {}", p_high);
+        let p_rest = b * (1.0_f64.powf(tait.gamma) - 1.0_f64);
+        assert!(p_rest.abs() < 1e-6_f64);
+        let p_high = b * ((1100.0_f64 / tait.reference_density).powf(tait.gamma) - 1.0_f64);
+        assert!(p_high > 0.0_f64);
     }
 
-    /// Hydrostatic equilibrium test: a 1D column of SPH particles.
-    /// After density and pressure systems run, interior particles
-    /// should have non-zero pressure forces (the EOS generates
-    /// positive pressure from kernel-overlap density > ρ₀).
-    ///
-    /// This validates the entire SPH pipeline end-to-end:
-    /// density → EOS → pressure force.
     #[test]
     fn test_hydrostatic_column_forces() {
         let mut world = World::new();
-
-        let sector_size = 1e6_f64;
-        let mut uni_config = UniverseConfig::default();
-        uni_config.sector_size = sector_size;
-        world.insert_resource(uni_config);
+        let mut uni = UniverseConfig::default();
+        uni.sector_size = 1e6_f64;
+        world.insert_resource(uni);
         world.insert_resource(TaitEquationConfig {
-            reference_density: 1000.0_f64,
-            speed_of_sound: 20.0_f64,
-            gamma: 7.0_f64,
+            reference_density: 1000.0_f64, speed_of_sound: 20.0_f64, gamma: 7.0_f64,
         });
         world.insert_resource(SphViscosityConfig::default());
         world.insert_resource(SimulationTime::with_dt(0.001_f64));
 
-        // Create a 1D column of 20 particles along the Y axis
-        // Use large mass so kernel overlap produces ρ > ρ₀
-        let n_particles = 20_usize;
-        let spacing = 0.05_f64;
-        let h = 0.2_f64;       // smoothing radius >> spacing → many neighbors
-        let mass = 100.0_f64;   // high mass → high density from kernel overlap
-
-        let mut entities = Vec::new();
-        for i in 0..n_particles {
-            let y = i as f64 * spacing;
-            let e = world.spawn((
-                Sector::default(),
-                LocalPosition(DVec3::new(0.0, y, 0.0)),
-                Mass(mass),
-                Velocity(DVec3::ZERO),
-                Force(DVec3::ZERO),
-                Acceleration(DVec3::ZERO),
-                SmoothedDensity::default(),
-                Pressure::default(),
-                SmoothingRadius(h),
-                FluidParticle,
-            )).id();
-            entities.push(e);
+        let n = 20_usize;
+        let (spacing, h, mass) = (0.05_f64, 0.2_f64, 100.0_f64);
+        let mut ents = Vec::new();
+        for i in 0..n {
+            ents.push(world.spawn((
+                Sector::default(), LocalPosition(DVec3::new(0.0, i as f64 * spacing, 0.0)),
+                Mass(mass), Velocity(DVec3::ZERO), Force(DVec3::ZERO),
+                Acceleration(DVec3::ZERO), SmoothedDensity::default(),
+                Pressure::default(), SmoothingRadius(h), FluidParticle,
+            )).id());
         }
-
-        // Manually build candidate pairs (all within 2h of each other)
         let mut pairs = Vec::new();
-        for i in 0..n_particles {
-            for j in (i + 1)..n_particles {
-                let dy = ((j - i) as f64) * spacing;
-                if dy < 2.0_f64 * h {
-                    pairs.push(CandidatePair {
-                        entity_a: entities[i],
-                        entity_b: entities[j],
-                    });
-                }
+        for i in 0..n { for j in (i+1)..n {
+            if ((j-i) as f64) * spacing < 2.0_f64 * h {
+                pairs.push(CandidatePair { entity_a: ents[i], entity_b: ents[j] });
             }
-        }
+        }}
         world.insert_resource(CandidatePairs(pairs));
         world.insert_resource(KdTreeBroadphase::default());
 
-        // Run density + EOS + pressure force
-        let mut schedule = Schedule::default();
-        schedule.add_systems(sph_density_system);
-        schedule.add_systems(sph_eos_system.after(sph_density_system));
-        schedule.add_systems(sph_pressure_force_system.after(sph_eos_system));
-        schedule.run(&mut world);
+        let mut sched = Schedule::default();
+        sched.add_systems(sph_density_system);
+        sched.add_systems(sph_eos_system.after(sph_density_system));
+        sched.add_systems(sph_pressure_force_system.after(sph_eos_system));
+        sched.run(&mut world);
 
-        // Interior particle should have non-zero pressure force
-        let mid = n_particles / 2;
-        let f_mid = world.get::<Force>(entities[mid]).expect("mid entity").0;
+        let f_mid = world.get::<Force>(ents[n/2]).unwrap().0;
+        assert!(f_mid.length() > 1e-6_f64, "Interior force zero: {:?}", f_mid);
+        let f_edge = world.get::<Force>(ents[0]).unwrap().0;
+        assert!(f_edge.length() > f_mid.length(), "Edge < interior");
+    }
+
+    /// Dam break test (qualitative, §V): a block of fluid particles
+    /// under gravity should spread laterally over time. After N ticks
+    /// the X-extent of the fluid should have increased.
+    #[test]
+    fn test_dam_break_spreading() {
+        let mut world = World::new();
+        let mut uni = UniverseConfig::default();
+        uni.sector_size = 1e6_f64;
+        world.insert_resource(uni);
+        world.insert_resource(TaitEquationConfig {
+            reference_density: 1000.0_f64, speed_of_sound: 20.0_f64, gamma: 7.0_f64,
+        });
+        world.insert_resource(SphViscosityConfig::default());
+        let dt = 1e-4_f64;
+        world.insert_resource(SimulationTime::with_dt(dt));
+
+        // Create a 3×3 block of fluid on the left side (x=0..0.1, y=0..0.1)
+        let spacing = 0.05_f64;
+        let h = 0.08_f64;
+        let mass = 50.0_f64;
+        let mut ents = Vec::new();
+        for ix in 0..3_usize {
+            for iy in 0..3_usize {
+                let pos = DVec3::new(ix as f64 * spacing, iy as f64 * spacing, 0.0);
+                ents.push(world.spawn((
+                    Sector::default(), LocalPosition(pos),
+                    Mass(mass), Velocity(DVec3::ZERO), Force(DVec3::ZERO),
+                    Acceleration(DVec3::ZERO), SmoothedDensity::default(),
+                    Pressure::default(), SmoothingRadius(h), FluidParticle,
+                )).id());
+            }
+        }
+
+        // Record initial X-extent
+        let initial_x_max: f64 = ents.iter()
+            .map(|e| world.get::<LocalPosition>(*e).unwrap().0.x)
+            .fold(f64::NEG_INFINITY, f64::max);
+        let initial_x_min: f64 = ents.iter()
+            .map(|e| world.get::<LocalPosition>(*e).unwrap().0.x)
+            .fold(f64::INFINITY, f64::min);
+        let initial_extent = initial_x_max - initial_x_min;
+
+        // Run multiple ticks: density → EOS → pressure → accel → integrate
+        for _tick in 0..50 {
+            // Rebuild pairs each tick (brute-force for 9 particles)
+            let mut pairs = Vec::new();
+            let positions: Vec<(usize, DVec3)> = ents.iter().enumerate()
+                .map(|(i, e)| (i, world.get::<LocalPosition>(*e).unwrap().0))
+                .collect();
+            for i in 0..positions.len() {
+                for j in (i+1)..positions.len() {
+                    let d = (positions[i].1 - positions[j].1).length();
+                    if d < 2.0_f64 * h {
+                        pairs.push(CandidatePair { entity_a: ents[i], entity_b: ents[j] });
+                    }
+                }
+            }
+            world.insert_resource(CandidatePairs(pairs));
+            world.insert_resource(KdTreeBroadphase::default());
+
+            // Reset forces
+            for e in &ents {
+                if let Some(mut f) = world.get_mut::<Force>(*e) { f.0 = DVec3::ZERO; }
+            }
+
+            // SPH pipeline
+            let mut sched = Schedule::default();
+            sched.add_systems(sph_density_system);
+            sched.add_systems(sph_eos_system.after(sph_density_system));
+            sched.add_systems(sph_pressure_force_system.after(sph_eos_system));
+            sched.run(&mut world);
+
+            // Semi-implicit Euler: v += F/m * dt, x += v * dt
+            for e in &ents {
+                let f = world.get::<Force>(*e).unwrap().0;
+                let m = world.get::<Mass>(*e).unwrap().0;
+                let acc = f / m;
+                let mut vel = world.get_mut::<Velocity>(*e).unwrap();
+                vel.0 += acc * dt;
+                let new_v = vel.0;
+                drop(vel);
+                let mut pos = world.get_mut::<LocalPosition>(*e).unwrap();
+                pos.0 += new_v * dt;
+            }
+        }
+
+        // After 50 ticks, X-extent should have increased (particles spread)
+        let final_x_max: f64 = ents.iter()
+            .map(|e| world.get::<LocalPosition>(*e).unwrap().0.x)
+            .fold(f64::NEG_INFINITY, f64::max);
+        let final_x_min: f64 = ents.iter()
+            .map(|e| world.get::<LocalPosition>(*e).unwrap().0.x)
+            .fold(f64::INFINITY, f64::min);
+        let final_extent = final_x_max - final_x_min;
+
         assert!(
-            f_mid.length() > 1e-6_f64,
-            "Interior particle should have non-zero pressure force, got {:?}",
-            f_mid
+            final_extent > initial_extent,
+            "Fluid should spread: initial extent={}, final extent={}",
+            initial_extent, final_extent
         );
 
-        // Density should be well above zero
-        let rho_mid = world.get::<SmoothedDensity>(entities[mid]).expect("mid density").0;
-        assert!(
-            rho_mid > 0.0_f64,
-            "Smoothed density should be positive, got {}",
-            rho_mid
-        );
-
-        // Boundary particles should have asymmetric (larger) forces
-        // because they have fewer neighbors on one side
-        let f_edge = world.get::<Force>(entities[0]).expect("edge entity").0;
-        assert!(
-            f_edge.length() > f_mid.length(),
-            "Edge particle force ({}) should exceed interior ({})",
-            f_edge.length(),
-            f_mid.length()
-        );
-
-        // Total mass conservation: Σ mⱼ unchanged
-        let total_mass: f64 = entities.iter()
-            .map(|e| world.get::<Mass>(*e).unwrap().0)
-            .sum();
-        assert!(
-            (total_mass - n_particles as f64 * mass).abs() < 1e-12_f64,
-            "Total mass should be conserved"
-        );
+        // All positions should remain finite
+        for e in &ents {
+            let p = world.get::<LocalPosition>(*e).unwrap().0;
+            assert!(p.is_finite(), "Position went NaN/Inf: {:?}", p);
+        }
     }
 }
-

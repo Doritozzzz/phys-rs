@@ -132,9 +132,9 @@
 - [x] **7.7:** Monaghan artificial viscosity — shock-capturing term `Πᵢⱼ` for approaching particles (§V.3).
 - [x] **7.8:** XSPH velocity correction — smooths particle trajectories for visual stability.
 - [x] **7.9:** SPH neighbor search via K-D tree (reuse Phase 5 broadphase infrastructure).
-- [ ] **7.10:** Boundary handling — ghost/mirror particles at domain edges to prevent vacuum.
+- [x] **7.10:** Boundary handling — repulsive wall force at domain edges (`SphBoundaryConfig` + `sph_boundary_system`).
 - [x] **7.11:** Unit test: hydrostatic equilibrium — fluid column validates full SPH pipeline (density→EOS→pressure).
-- [ ] **7.12:** Unit test: dam break — qualitative validation of free-surface spreading.
+- [x] **7.12:** Unit test: dam break — qualitative validation of free-surface spreading (50-tick integration, 3×3 block).
 
 
 ---

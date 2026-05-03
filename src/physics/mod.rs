@@ -36,6 +36,7 @@ pub use origin::sector_boundary_system;
 pub use rigid_body::*;
 pub use sph::{
     sph_density_system, sph_eos_system, sph_pressure_force_system, sph_viscosity_system,
-    sph_xsph_system, SphViscosityConfig, TaitEquationConfig, XsphConfig,
+    sph_xsph_system, sph_boundary_system, SphBoundaryConfig, SphViscosityConfig,
+    TaitEquationConfig, XsphConfig,
 };
 

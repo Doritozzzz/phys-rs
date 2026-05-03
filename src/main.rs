@@ -32,6 +32,7 @@ fn main() {
     world.insert_resource(physics::TaitEquationConfig::default());
     world.insert_resource(physics::SphViscosityConfig::default());
     world.insert_resource(physics::XsphConfig::default());
+    world.insert_resource(physics::SphBoundaryConfig::default());
 
     // --- Schedule Setup ---
     let mut schedule = Schedule::default();
@@ -78,12 +79,19 @@ fn main() {
             .after(physics::sph_eos_system)
     );
 
+    // Stage 2.7: Boundary repulsion for domain-confined SPH
+    schedule.add_systems(
+        physics::sph_boundary_system
+            .after(physics::sph_viscosity_system)
+    );
+
     // Stage 3: Compute acceleration from ALL accumulated forces
     schedule.add_systems(
         physics::compute_acceleration_system
             .after(physics::brute_force_gravity_system)
             .after(physics::sph_pressure_force_system)
             .after(physics::sph_viscosity_system)
+            .after(physics::sph_boundary_system)
     );
 
     // Stage 4: Integration (position + velocity update)
