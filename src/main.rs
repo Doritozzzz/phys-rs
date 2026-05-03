@@ -33,6 +33,8 @@ fn main() {
     world.insert_resource(physics::SphViscosityConfig::default());
     world.insert_resource(physics::XsphConfig::default());
     world.insert_resource(physics::SphBoundaryConfig::default());
+    world.insert_resource(physics::RadiationConfig::default());
+    world.insert_resource(physics::ThermalConductionConfig::default());
 
     // --- Schedule Setup ---
     let mut schedule = Schedule::default();
@@ -180,6 +182,25 @@ fn main() {
         physics::energy_drift_monitor_system
             .after(physics::compute_kinetic_energy_system)
             .after(physics::compute_potential_energy_system)
+    );
+
+    // Stage 9: Thermodynamics (§VI)
+    //   sync T from U → conduction → radiation → sync U from T
+    schedule.add_systems(
+        physics::sync_temperature_system
+            .after(physics::collision_impulse_system)
+    );
+    schedule.add_systems(
+        physics::heat_conduction_system
+            .after(physics::sync_temperature_system)
+    );
+    schedule.add_systems(
+        physics::radiative_cooling_system
+            .after(physics::heat_conduction_system)
+    );
+    schedule.add_systems(
+        physics::sync_internal_energy_system
+            .after(physics::radiative_cooling_system)
     );
 
     // --- Main Loop ---

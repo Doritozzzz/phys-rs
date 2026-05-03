@@ -141,14 +141,14 @@
 
 ## Phase 8: Thermodynamics & Heat Transfer
 
-- [ ] **8.1:** `src/components/thermal.rs` — `InternalEnergy(f64)`, `HeatCapacity(f64)`, `ThermalConductivity(f64)`.
-- [ ] **8.2:** `src/physics/thermodynamics.rs` — Ideal gas law: `P = ρ·R_specific·T` (§VI.1).
-- [ ] **8.3:** Conduction system — Fourier's law `q = -k∇T`, heat diffusion between neighbors (§VI.2).
-- [ ] **8.4:** Radiation system — Stefan-Boltzmann blackbody emission `j* = σεT⁴` (§VI.2).
-- [ ] **8.5:** Wien's displacement law — peak emission wavelength `λ_max = b/T` (§VI.2), stored for rendering use.
-- [ ] **8.6:** SPH-thermal coupling — pressure depends on temperature-derived internal energy.
-- [ ] **8.7:** Unit test: isolated body radiative cooling — verify exponential temperature decay.
-- [ ] **8.8:** Unit test: two bodies in thermal contact — heat flows hot→cold, equilibrium reached.
+- [x] **8.1:** `src/components/thermal.rs` — `InternalEnergy(f64)`, `HeatCapacity(f64)`, `ThermalConductivity(f64)` (pre-existing).
+- [x] **8.2:** `src/physics/thermodynamics.rs` — Ideal gas law: `P = ρ·(k_B/m_particle)·T` (§VI.1), plus `ThermalBody` marker.
+- [x] **8.3:** Conduction system — Fourier's law `q = -k∇T`, harmonic mean conductivity, neighbor-based diffusion (§VI.2).
+- [x] **8.4:** Radiation system — Stefan-Boltzmann net cooling `dT/dt = -ε·σ·A·(T⁴-T_bg⁴)/(m·cᵥ)` (§VI.2).
+- [x] **8.5:** Wien's displacement law — `λ_max = b/T` utility function (§VI.2).
+- [x] **8.6:** SPH-thermal coupling — `sync_temperature_system` / `sync_internal_energy_system` bidirectional T↔U sync.
+- [x] **8.7:** Unit test: isolated body radiative cooling — monotonic T decrease over 200 ticks.
+- [x] **8.8:** Unit test: two bodies in thermal contact — converge to mean T (550K), energy conserved.
 
 ---
 

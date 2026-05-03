@@ -14,6 +14,7 @@ pub mod orbital;
 pub mod origin;
 pub mod rigid_body;
 pub mod sph;
+pub mod thermodynamics;
 
 pub use broadphase::{
     broadphase_query_system, build_broadphase_system, CandidatePairs, KdTreeBroadphase,
@@ -39,4 +40,8 @@ pub use sph::{
     sph_xsph_system, sph_boundary_system, SphBoundaryConfig, SphViscosityConfig,
     TaitEquationConfig, XsphConfig,
 };
-
+pub use thermodynamics::{
+    sync_temperature_system, sync_internal_energy_system, heat_conduction_system,
+    radiative_cooling_system, wien_peak_wavelength, ideal_gas_pressure,
+    ThermalBody, RadiationConfig, ThermalConductionConfig,
+};
