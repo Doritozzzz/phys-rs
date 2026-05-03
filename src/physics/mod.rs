@@ -13,6 +13,7 @@ pub mod integrators;
 pub mod orbital;
 pub mod origin;
 pub mod rigid_body;
+pub mod sph;
 
 pub use broadphase::{
     broadphase_query_system, build_broadphase_system, CandidatePairs, KdTreeBroadphase,
@@ -33,3 +34,8 @@ pub use integrators::{
 pub use orbital::{escape_velocity, roche_limit, schwarzschild_radius, vis_viva_velocity};
 pub use origin::sector_boundary_system;
 pub use rigid_body::*;
+pub use sph::{
+    sph_density_system, sph_eos_system, sph_pressure_force_system, sph_viscosity_system,
+    sph_xsph_system, SphViscosityConfig, TaitEquationConfig, XsphConfig,
+};
+

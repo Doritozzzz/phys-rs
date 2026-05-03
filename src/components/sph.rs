@@ -21,3 +21,10 @@ pub struct Pressure(pub f64);
 /// Determines the neighborhood size for particle interactions.
 #[derive(Component, Debug, Clone, Copy, PartialEq, Default)]
 pub struct SmoothingRadius(pub f64);
+
+/// Marker component identifying an entity as an SPH fluid particle.
+///
+/// Attach this to any entity that should participate in SPH
+/// density estimation, pressure, and viscosity calculations.
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct FluidParticle;

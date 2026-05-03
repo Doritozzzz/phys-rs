@@ -29,6 +29,9 @@ fn main() {
     world.insert_resource(crate::components::collisions::CollisionEvents::default());
     world.insert_resource(physics::CandidatePairs(Vec::new()));
     world.insert_resource(physics::KdTreeBroadphase::default());
+    world.insert_resource(physics::TaitEquationConfig::default());
+    world.insert_resource(physics::SphViscosityConfig::default());
+    world.insert_resource(physics::XsphConfig::default());
 
     // --- Schedule Setup ---
     let mut schedule = Schedule::default();
@@ -38,16 +41,49 @@ fn main() {
         (physics::reset_forces, physics::reset_torques)
     );
 
-    // Stage 2: Force calculators (gravity, EM, etc.) — added in Phase 4+
+    // Stage 1.5: Spatial partitioning (broadphase)
+    // Runs early so gravity tree, SPH, and collisions can all use the
+    // K-D tree neighbor data from a single build per tick.
     schedule.add_systems(
-        physics::brute_force_gravity_system
+        physics::build_broadphase_system
             .after(physics::reset_forces)
     );
+    schedule.add_systems(
+        physics::broadphase_query_system
+            .after(physics::build_broadphase_system)
+    );
 
-    // Stage 3: Compute acceleration from accumulated force
+    // Stage 2: Gravitational force calculator
+    schedule.add_systems(
+        physics::brute_force_gravity_system
+            .after(physics::broadphase_query_system)
+    );
+
+    // Stage 2.5: SPH fluid dynamics pipeline (§V)
+    //   density → equation of state → pressure force → viscosity
+    schedule.add_systems(
+        physics::sph_density_system
+            .after(physics::broadphase_query_system)
+    );
+    schedule.add_systems(
+        physics::sph_eos_system
+            .after(physics::sph_density_system)
+    );
+    schedule.add_systems(
+        physics::sph_pressure_force_system
+            .after(physics::sph_eos_system)
+    );
+    schedule.add_systems(
+        physics::sph_viscosity_system
+            .after(physics::sph_eos_system)
+    );
+
+    // Stage 3: Compute acceleration from ALL accumulated forces
     schedule.add_systems(
         physics::compute_acceleration_system
             .after(physics::brute_force_gravity_system)
+            .after(physics::sph_pressure_force_system)
+            .after(physics::sph_viscosity_system)
     );
 
     // Stage 4: Integration (position + velocity update)
@@ -78,6 +114,12 @@ fn main() {
         }
     }
 
+    // Stage 4.5: XSPH velocity smoothing (post-integration, SPH only)
+    schedule.add_systems(
+        physics::sph_xsph_system
+            .after(physics::velocity_verlet_velocity_system)
+    );
+
     // Stage 5: Sector boundary normalization
     schedule.add_systems(
         physics::sector_boundary_system
@@ -107,19 +149,12 @@ fn main() {
             .after(physics::velocity_verlet_velocity_system)
     );
 
-    // Stage 7.5: Collisions (Broadphase -> Narrowphase -> Impulse)
-    schedule.add_systems(
-        physics::build_broadphase_system
-            .after(physics::rotational_integration_system)
-            .after(physics::sector_boundary_system)
-    );
-    schedule.add_systems(
-        physics::broadphase_query_system
-            .after(physics::build_broadphase_system)
-    );
+    // Stage 7.5: Narrowphase collisions & impulse resolution
+    // (Broadphase already ran in Stage 1.5)
     schedule.add_systems(
         physics::narrow_phase_system
-            .after(physics::broadphase_query_system)
+            .after(physics::rotational_integration_system)
+            .after(physics::sector_boundary_system)
     );
     schedule.add_systems(
         physics::collision_impulse_system

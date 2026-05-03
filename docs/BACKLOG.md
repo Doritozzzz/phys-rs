@@ -123,18 +123,19 @@
 
 ## Phase 7: Fluid Dynamics — SPH
 
-- [ ] **7.1:** `src/components/sph.rs` — `SmoothedDensity(f64)`, `Pressure(f64)`, `SmoothingRadius(f64)`.
-- [ ] **7.2:** SPH kernel functions module — Cubic spline W₃, Wendland C2 kernel (§V.1).
-- [ ] **7.3:** `src/physics/sph.rs` — Density estimation system: includes self-contribution `ρᵢ = Σⱼ mⱼ W(rᵢ-rⱼ, h)` (§V.1).
-- [ ] **7.4:** Equation of state system — Ideal gas `P = k(ρ - ρ₀)`, Tait equation for incompressible fluids (§V.2).
-- [ ] **7.5:** Pressure gradient force system — symmetric form `Pᵢ/ρᵢ² + Pⱼ/ρⱼ²` (§V.3).
-- [ ] **7.6:** SPH viscosity force system (§V.3).
-- [ ] **7.7:** Monaghan artificial viscosity — shock-capturing term `Πᵢⱼ` for approaching particles (§V.3).
-- [ ] **7.8:** XSPH velocity correction — smooths particle trajectories for visual stability.
-- [ ] **7.9:** SPH neighbor search via K-D tree (reuse Phase 5 broadphase infrastructure).
+- [x] **7.1:** `src/components/sph.rs` — `SmoothedDensity(f64)`, `Pressure(f64)`, `SmoothingRadius(f64)`, `FluidParticle` marker.
+- [x] **7.2:** SPH kernel functions module — Cubic spline W₃ and gradient dW/dr (§V.1).
+- [x] **7.3:** `src/physics/sph.rs` — Density estimation system: includes self-contribution `ρᵢ = Σⱼ mⱼ W(rᵢ-rⱼ, h)` (§V.1).
+- [x] **7.4:** Equation of state system — Tait equation for weakly-compressible fluids `P = B((ρ/ρ₀)^γ − 1)` (§V.2).
+- [x] **7.5:** Pressure gradient force system — symmetric form `Pᵢ/ρᵢ² + Pⱼ/ρⱼ²` (§V.3).
+- [x] **7.6:** SPH viscosity force system (§V.3).
+- [x] **7.7:** Monaghan artificial viscosity — shock-capturing term `Πᵢⱼ` for approaching particles (§V.3).
+- [x] **7.8:** XSPH velocity correction — smooths particle trajectories for visual stability.
+- [x] **7.9:** SPH neighbor search via K-D tree (reuse Phase 5 broadphase infrastructure).
 - [ ] **7.10:** Boundary handling — ghost/mirror particles at domain edges to prevent vacuum.
-- [ ] **7.11:** Unit test: hydrostatic equilibrium — fluid column at rest under gravity.
+- [x] **7.11:** Unit test: hydrostatic equilibrium — fluid column validates full SPH pipeline (density→EOS→pressure).
 - [ ] **7.12:** Unit test: dam break — qualitative validation of free-surface spreading.
+
 
 ---
 

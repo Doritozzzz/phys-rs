@@ -19,5 +19,5 @@ pub use identifiers::{BodyType, EntityName};
 pub use material::{Charge, Density, Luminosity, Opacity, Temperature};
 pub use rotational::{AngularVelocity, InertiaTensor, Orientation, Torque};
 pub use spatial::BoundingRadius;
-pub use sph::{Pressure, SmoothedDensity, SmoothingRadius};
+pub use sph::{FluidParticle, Pressure, SmoothedDensity, SmoothingRadius};
 pub use thermal::{HeatCapacity, InternalEnergy, ThermalConductivity};
