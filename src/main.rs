@@ -90,10 +90,21 @@ fn main() {
             .after(physics::compute_acceleration_system)
     );
 
-    // Stage 7: Rotational integration
+    // Stage 7: Rotational dynamics
+    schedule.add_systems(
+        physics::compute_angular_acceleration_system
+            .after(physics::reset_torques)
+            .after(physics::update_momentum_system) 
+    );
+    schedule.add_systems(
+        physics::damping_system
+            .after(physics::compute_acceleration_system)
+    );
     schedule.add_systems(
         physics::rotational_integration_system
-            .after(physics::compute_acceleration_system)
+            .after(physics::compute_angular_acceleration_system)
+            .after(physics::damping_system)
+            .after(physics::velocity_verlet_velocity_system)
     );
 
     // Stage 7.5: Collisions (Broadphase -> Narrowphase -> Impulse)

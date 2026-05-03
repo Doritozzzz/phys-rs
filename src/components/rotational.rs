@@ -72,4 +72,44 @@ impl InertiaTensor {
         let i = 0.4_f64 * mass * radius * radius;
         Self::diagonal(i, i, i)
     }
+
+    /// Create an inertia tensor for a solid cuboid (box).
+    /// Size is the total width, height, and depth.
+    pub fn solid_box(mass: f64, size_x: f64, size_y: f64, size_z: f64) -> Self {
+        let ix = (1.0 / 12.0) * mass * (size_y * size_y + size_z * size_z);
+        let iy = (1.0 / 12.0) * mass * (size_x * size_x + size_z * size_z);
+        let iz = (1.0 / 12.0) * mass * (size_x * size_x + size_y * size_y);
+        Self::diagonal(ix, iy, iz)
+    }
+
+    /// Create an inertia tensor for a solid cylinder aligned along the Y axis.
+    pub fn solid_cylinder(mass: f64, radius: f64, height: f64) -> Self {
+        let iy = 0.5 * mass * radius * radius;
+        let ixz = (1.0 / 12.0) * mass * (3.0 * radius * radius + height * height);
+        Self::diagonal(ixz, iy, ixz)
+    }
+}
+
+/// Linear damping factor.
+///
+/// Reduces linear velocity over time: `v_new = v * (1 - damping * dt)`
+#[derive(Component, Debug, Clone, Copy)]
+pub struct LinearDamping(pub f64);
+
+impl Default for LinearDamping {
+    fn default() -> Self {
+        Self(0.0)
+    }
+}
+
+/// Angular damping factor.
+///
+/// Reduces angular velocity over time: `w_new = w * (1 - damping * dt)`
+#[derive(Component, Debug, Clone, Copy)]
+pub struct AngularDamping(pub f64);
+
+impl Default for AngularDamping {
+    fn default() -> Self {
+        Self(0.0)
+    }
 }

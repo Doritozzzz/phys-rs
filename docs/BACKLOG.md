@@ -99,25 +99,25 @@
 - [x] **5.5:** Narrow-phase system — contact manifold generation via `parry3d-f64` between candidate pairs.
 - [x] **5.6:** Collision impulse resolution (§III.1) — full form with rotational inertia tensor terms.
 - [x] **5.7:** `CoefficientOfRestitution(f64)` component (0.0 = perfectly inelastic, 1.0 = perfectly elastic).
-- [ ] **5.8:** Friction impulse (tangential) — Coulomb kinetic friction model (§II.4).
+- [x] **5.8:** Friction impulse (tangential) — Coulomb kinetic friction model (§II.4).
 - [x] **5.9:** `CollisionEvent` — event struct `{ entity_a, entity_b, normal, point, impulse_magnitude }`.
-- [ ] **5.10:** Sub-stepping for fast bodies — temporal subdivision (CCD-lite) to prevent tunneling.
-- [ ] **5.11:** Unit test: two spheres head-on collision — verify linear momentum conservation.
-- [ ] **5.12:** Unit test: sphere bouncing on plane — verify restitution coefficient behavior.
+- [x] **5.10:** Sub-stepping for fast bodies — temporal subdivision (CCD-lite) to prevent tunneling.
+- [x] **5.11:** Unit test: two spheres head-on collision — verify linear momentum conservation.
+- [x] **5.12:** Unit test: sphere bouncing on plane — verify restitution coefficient behavior.
 
 ---
 
 ## Phase 6: Rigid Body Dynamics
 
-- [ ] **6.1:** Inertia tensor computation for primitive shapes: solid sphere `I = 2/5·m·r²`, box, cylinder (§II.2).
-- [ ] **6.2:** Torque accumulator reset system — zeroes `Torque` each tick before torque calculators.
-- [ ] **6.3:** Angular acceleration system — `α = I⁻¹(τ - ω×(Iω))` (§II.2).
-- [ ] **6.4:** Angular velocity integration → quaternion orientation update + re-normalization (§II.3).
-- [ ] **6.5:** Contact-point torque generation — from collision manifold contact points.
-- [ ] **6.6:** Gyroscopic precession effects for rapidly spinning bodies.
-- [ ] **6.7:** Damping system — configurable per-body linear + angular damping factors.
-- [ ] **6.8:** Unit test: spinning top precession matches analytical prediction.
-- [ ] **6.9:** Unit test: angular momentum conservation in torque-free isolated system.
+- [x] **6.1:** Inertia tensor computation for primitive shapes: solid sphere `I = 2/5·m·r²`, box, cylinder (§II.2).
+- [x] **6.2:** Torque accumulator reset system — zeroes `Torque` each tick before torque calculators.
+- [x] **6.3:** Angular acceleration system — `α = I⁻¹(τ - ω×(Iω))` (§II.2).
+- [x] **6.4:** Angular velocity integration → quaternion orientation update + re-normalization (§II.3).
+- [x] **6.5:** Contact-point torque generation — from collision manifold contact points.
+- [x] **6.6:** Gyroscopic precession effects for rapidly spinning bodies.
+- [x] **6.7:** Damping system — configurable per-body linear + angular damping factors.
+- [x] **6.8:** Unit test: spinning top precession matches analytical prediction.
+- [x] **6.9:** Unit test: angular momentum conservation in torque-free isolated system.
 
 ---
 

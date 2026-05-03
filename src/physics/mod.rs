@@ -12,6 +12,7 @@ pub mod gravity_tree;
 pub mod integrators;
 pub mod orbital;
 pub mod origin;
+pub mod rigid_body;
 
 pub use broadphase::{
     broadphase_query_system, build_broadphase_system, CandidatePairs, KdTreeBroadphase,
@@ -31,3 +32,4 @@ pub use integrators::{
 };
 pub use orbital::{escape_velocity, roche_limit, schwarzschild_radius, vis_viva_velocity};
 pub use origin::sector_boundary_system;
+pub use rigid_body::*;

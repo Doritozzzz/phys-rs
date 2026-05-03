@@ -73,6 +73,7 @@ pub fn collision_impulse_system(
         &Mass,
         Option<&InertiaTensor>,
         Option<&CoefficientOfRestitution>,
+        Option<&crate::components::collisions::FrictionCoefficient>,
         &Sector,
         &LocalPosition,
     )>,
@@ -85,14 +86,20 @@ pub fn collision_impulse_system(
             continue;
         };
 
-        let (mut vel_a, mut ang_vel_a, mass_a, inertia_a, rest_a, sec_a, loc_a) = a;
-        let (mut vel_b, mut ang_vel_b, mass_b, inertia_b, rest_b, sec_b, loc_b) = b;
+        let (mut vel_a, mut ang_vel_a, mass_a, inertia_a, rest_a, fric_a, sec_a, loc_a) = a;
+        let (mut vel_b, mut ang_vel_b, mass_b, inertia_b, rest_b, fric_b, sec_b, loc_b) = b;
 
         // Minimum restitution coefficient
         let e = rest_a
             .map(|r| r.0)
             .unwrap_or(0.5)
             .min(rest_b.map(|r| r.0).unwrap_or(0.5));
+            
+        // Combined friction coefficient (typically multiplied, but min is also common)
+        let mu_k = fric_a
+            .map(|f| f.0)
+            .unwrap_or(0.3)
+            .min(fric_b.map(|f| f.0).unwrap_or(0.3));
 
         let pos_a = DVec3::ZERO;
         let pos_b = displacement(sec_a, loc_a, sec_b, loc_b, sector_size);
@@ -107,7 +114,8 @@ pub fn collision_impulse_system(
         let rel_vel_normal = v_rel.dot(event.normal);
 
         // Do not resolve if objects are already separating
-        if rel_vel_normal > 0.0 {
+        // v_rel.dot(normal) > 0 means approaching, < 0 means separating.
+        if rel_vel_normal < 0.0 {
             continue;
         }
 
@@ -122,28 +130,60 @@ pub fn collision_impulse_system(
             .map(|i| glam::DMat3::from_cols_array(&i.0).inverse())
             .unwrap_or(glam::DMat3::ZERO);
 
-        // Cross products for angular inertia component: (r x n)
+        // --- NORMAL IMPULSE ---
+        
         let r_a_cross_n = r_a.cross(event.normal);
         let r_b_cross_n = r_b.cross(event.normal);
 
-        // I^{-1} (r x n)
-        let vec_i_inv_a = inv_inertia_a * r_a_cross_n;
-        let vec_i_inv_b = inv_inertia_b * r_b_cross_n;
+        let vec_i_inv_a_n = inv_inertia_a * r_a_cross_n;
+        let vec_i_inv_b_n = inv_inertia_b * r_b_cross_n;
 
-        // [ I^{-1} (r x n) ] x r . n
-        let rot_term_a = vec_i_inv_a.cross(r_a).dot(event.normal);
-        let rot_term_b = vec_i_inv_b.cross(r_b).dot(event.normal);
+        let rot_term_a_n = vec_i_inv_a_n.cross(r_a).dot(event.normal);
+        let rot_term_b_n = vec_i_inv_b_n.cross(r_b).dot(event.normal);
 
-        // Compute impulse scalar j (PHYSICS_MASTER_INDEX §III.1)
-        let j = -(1.0 + e) * rel_vel_normal / (inv_mass_a + inv_mass_b + rot_term_a + rot_term_b);
+        let j_n = -(1.0 + e) * rel_vel_normal / (inv_mass_a + inv_mass_b + rot_term_a_n + rot_term_b_n);
+        let impulse_n = event.normal * j_n;
+        
+        // --- TANGENTIAL (FRICTION) IMPULSE ---
+        
+        let v_tangential = v_rel - event.normal * rel_vel_normal;
+        
+        let mut impulse_t = DVec3::ZERO;
+        let mut vec_i_inv_a_t = DVec3::ZERO;
+        let mut vec_i_inv_b_t = DVec3::ZERO;
+        let mut j_t = 0.0;
+        
+        // Only compute friction if tangential velocity is significant
+        if v_tangential.length_squared() > 1e-8 {
+            let tangent = v_tangential.normalize();
+            let rel_vel_tangent = v_rel.dot(tangent);
+            
+            let r_a_cross_t = r_a.cross(tangent);
+            let r_b_cross_t = r_b.cross(tangent);
 
-        let impulse = event.normal * j;
+            vec_i_inv_a_t = inv_inertia_a * r_a_cross_t;
+            vec_i_inv_b_t = inv_inertia_b * r_b_cross_t;
 
-        vel_a.0 += impulse * inv_mass_a;
-        vel_b.0 -= impulse * inv_mass_b;
+            let rot_term_a_t = vec_i_inv_a_t.cross(r_a).dot(tangent);
+            let rot_term_b_t = vec_i_inv_b_t.cross(r_b).dot(tangent);
+            
+            let j_t_unclamped = -rel_vel_tangent / (inv_mass_a + inv_mass_b + rot_term_a_t + rot_term_b_t);
+            
+            // Coulomb friction clamping
+            let max_friction = mu_k * j_n.abs();
+            j_t = j_t_unclamped.clamp(-max_friction, max_friction);
+            impulse_t = tangent * j_t;
+        }
 
-        ang_vel_a.0 += vec_i_inv_a * j;
-        ang_vel_b.0 -= vec_i_inv_b * j;
+        // --- APPLY IMPULSES ---
+        
+        let total_impulse = impulse_n + impulse_t;
+
+        vel_a.0 += total_impulse * inv_mass_a;
+        vel_b.0 -= total_impulse * inv_mass_b;
+
+        ang_vel_a.0 += vec_i_inv_a_n * j_n + vec_i_inv_a_t * j_t;
+        ang_vel_b.0 -= vec_i_inv_b_n * j_n + vec_i_inv_b_t * j_t;
     }
 
     // Clear events after processing
@@ -153,16 +193,103 @@ pub fn collision_impulse_system(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use glam::DVec3;
+    use crate::components::dynamics::{Mass, Velocity};
+    use crate::components::rotational::{AngularVelocity, InertiaTensor};
+    use crate::components::collisions::CoefficientOfRestitution;
+
+    fn setup_world() -> World {
+        let mut world = World::new();
+        world.insert_resource(UniverseConfig::default());
+        world.insert_resource(CollisionEvents::default());
+        world
+    }
 
     #[test]
     fn test_head_on_sphere_collision() {
-        // Implementation stub for verifying linear momentum conservation
-        assert!(true);
+        let mut world = setup_world();
+
+        // Sphere A (moving right)
+        let entity_a = world.spawn((
+            Velocity(DVec3::new(10.0, 0.0, 0.0)),
+            AngularVelocity(DVec3::ZERO),
+            Mass(5.0),
+            Sector::ORIGIN,
+            LocalPosition::ZERO,
+            CoefficientOfRestitution(1.0), // perfectly elastic
+        )).id();
+
+        // Sphere B (moving left)
+        let entity_b = world.spawn((
+            Velocity(DVec3::new(-10.0, 0.0, 0.0)),
+            AngularVelocity(DVec3::ZERO),
+            Mass(5.0),
+            Sector::ORIGIN,
+            LocalPosition::ZERO,
+            CoefficientOfRestitution(1.0), // perfectly elastic
+        )).id();
+
+        // Inject a collision event
+        world.resource_mut::<CollisionEvents>().0.push(CollisionEvent {
+            entity_a,
+            entity_b,
+            normal: DVec3::new(1.0, 0.0, 0.0), // normal from A to B
+            point: DVec3::ZERO,
+            impulse_magnitude: 0.0,
+        });
+
+        // Run the system manually (we create a small schedule)
+        let mut schedule = Schedule::default();
+        schedule.add_systems(collision_impulse_system);
+        schedule.run(&mut world);
+
+        // Verify velocities exchanged
+        let v_a = world.get::<Velocity>(entity_a).unwrap().0;
+        let v_b = world.get::<Velocity>(entity_b).unwrap().0;
+
+        assert!((v_a.x - (-10.0)).abs() < 1e-5, "A should bounce back with -10 m/s, got {}", v_a.x);
+        assert!((v_b.x - 10.0).abs() < 1e-5, "B should bounce back with 10 m/s, got {}", v_b.x);
     }
 
     #[test]
     fn test_restitution_behavior() {
-        // Implementation stub for sphere bouncing on plane
-        assert!(true);
+        let mut world = setup_world();
+
+        // Ball A (falling)
+        let entity_a = world.spawn((
+            Velocity(DVec3::new(0.0, -10.0, 0.0)),
+            AngularVelocity(DVec3::ZERO),
+            Mass(1.0),
+            Sector::ORIGIN,
+            LocalPosition::ZERO,
+            CoefficientOfRestitution(0.5), // half elastic
+        )).id();
+
+        // Ground B (infinite mass -> very large mass)
+        let entity_b = world.spawn((
+            Velocity(DVec3::ZERO),
+            AngularVelocity(DVec3::ZERO),
+            Mass(1e12),
+            Sector::ORIGIN,
+            LocalPosition::ZERO,
+            CoefficientOfRestitution(0.5), // half elastic
+        )).id();
+
+        // Inject collision event (normal points UP)
+        world.resource_mut::<CollisionEvents>().0.push(CollisionEvent {
+            entity_a,
+            entity_b,
+            normal: DVec3::new(0.0, -1.0, 0.0), // Normal from A (falling) to B (ground) is DOWN
+            point: DVec3::ZERO,
+            impulse_magnitude: 0.0,
+        });
+
+        let mut schedule = Schedule::default();
+        schedule.add_systems(collision_impulse_system);
+        schedule.run(&mut world);
+
+        // Verify A bounces up with 0.5 * 10 = 5 m/s
+        let v_a = world.get::<Velocity>(entity_a).unwrap().0;
+        assert!((v_a.y - 5.0).abs() < 1e-3, "A should bounce up with 5 m/s, got {}", v_a.y);
     }
 }

@@ -58,8 +58,11 @@ impl Default for UniverseConfig {
         Self {
             gravitational_constant: super::constants::G,
             softening_epsilon: 1e-4_f64,
-            max_dt: 1e-1_f64,
-            min_dt: 1e-6_f64,
+            // For CCD-lite (Sub-stepping), we enforce a small max_dt.
+            // When the simulation runs, if the elapsed frame time is larger than max_dt,
+            // the fixed timestep accumulator will run the physics schedule multiple times.
+            max_dt: 1.0 / 240.0,
+            min_dt: 1.0 / 1000.0,
             barnes_hut_theta: 0.5_f64,
             integration_method: IntegrationMethod::VelocityVerlet,
             sector_size,
