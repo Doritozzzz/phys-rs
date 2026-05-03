@@ -77,30 +77,30 @@
 
 ## Phase 4: Gravitational Dynamics
 
-- [ ] **4.1:** `src/physics/gravity.rs` — N-body brute-force gravity system (§IV.1): softened denominator `r² + ε²`, vector form `F = -G·m₁·m₂·r_vec / (|r|² + ε²)^(3/2)`.
-- [ ] **4.2:** Newton's Third Law optimization — compute each pair (i,j) once, apply `+F` to i and `-F` to j.
-- [ ] **4.3:** Gravitational potential energy calculator — `U = -G·m₁·m₂/r` (§IV.1).
-- [ ] **4.4:** Kinetic energy calculator — `E_k = ½mv²` for all bodies.
-- [ ] **4.5:** `EnergyMonitor` resource — tracks total energy (E_k + U) per tick, logs warning if drift exceeds configurable threshold.
-- [ ] **4.6:** `src/physics/gravity_tree.rs` — Barnes-Hut octree approximation for O(N log N) gravity.
-- [ ] **4.7:** Barnes-Hut `θ` (opening angle) parameter exposed in `UniverseConfig` for accuracy/performance tuning.
-- [ ] **4.8:** Unit test: 3-body figure-8 solution stability over extended run.
-- [ ] **4.9:** Unit test: Kepler orbit — verify period matches analytical `T = 2π√(a³/GM)` within tolerance.
-- [ ] **4.10:** Orbital mechanics utility functions — vis-viva velocity, escape velocity, Roche limit (§IV.2, §IV.3).
+- [x] **4.1:** `src/physics/gravity.rs` — N-body brute-force gravity system (§IV.1): softened denominator `r² + ε²`, vector form `F = -G·m₁·m₂·r_vec / (|r|² + ε²)^(3/2)`.
+- [x] **4.2:** Newton's Third Law optimization — compute each pair (i,j) once, apply `+F` to i and `-F` to j.
+- [x] **4.3:** Gravitational potential energy calculator — `U = -G·m₁·m₂/r` (§IV.1).
+- [x] **4.4:** Kinetic energy calculator — `E_k = ½mv²` for all bodies.
+- [x] **4.5:** `EnergyMonitor` resource — tracks total energy (E_k + U) per tick, logs warning if drift exceeds configurable threshold.
+- [x] **4.6:** `src/physics/gravity_tree.rs` — Barnes-Hut octree approximation for O(N log N) gravity.
+- [x] **4.7:** Barnes-Hut `θ` (opening angle) parameter exposed in `UniverseConfig` for accuracy/performance tuning.
+- [x] **4.8:** Unit test: 3-body figure-8 solution stability over extended run.
+- [x] **4.9:** Unit test: Kepler orbit — verify period matches analytical `T = 2π√(a³/GM)` within tolerance.
+- [x] **4.10:** Orbital mechanics utility functions — vis-viva velocity, escape velocity, Roche limit (§IV.2, §IV.3).
 
 ---
 
 ## Phase 5: Spatial Partitioning & Collision Detection
 
-- [ ] **5.1:** `src/physics/broadphase.rs` — K-D tree construction with `kiddo` for spatial neighbor queries.
-- [ ] **5.2:** Broadphase query system — returns candidate collision pairs (entities within sum of `BoundingRadius`).
-- [ ] **5.3:** `src/physics/collisions.rs` — `parry3d-f64` shape integration (`Ball`, `Capsule`, `ConvexPolyhedron`).
-- [ ] **5.4:** `CollisionShape` component wrapping `parry3d-f64` `SharedShape`.
-- [ ] **5.5:** Narrow-phase system — contact manifold generation via `parry3d-f64` between candidate pairs.
-- [ ] **5.6:** Collision impulse resolution (§III.1) — full form with rotational inertia tensor terms.
-- [ ] **5.7:** `CoefficientOfRestitution(f64)` component (0.0 = perfectly inelastic, 1.0 = perfectly elastic).
+- [x] **5.1:** `src/physics/broadphase.rs` — K-D tree construction with `kiddo` for spatial neighbor queries.
+- [x] **5.2:** Broadphase query system — returns candidate collision pairs (entities within sum of `BoundingRadius`).
+- [x] **5.3:** `src/physics/collisions.rs` — `parry3d-f64` shape integration (`Ball`, `Capsule`, `ConvexPolyhedron`).
+- [x] **5.4:** `CollisionShape` component wrapping `parry3d-f64` `SharedShape`.
+- [x] **5.5:** Narrow-phase system — contact manifold generation via `parry3d-f64` between candidate pairs.
+- [x] **5.6:** Collision impulse resolution (§III.1) — full form with rotational inertia tensor terms.
+- [x] **5.7:** `CoefficientOfRestitution(f64)` component (0.0 = perfectly inelastic, 1.0 = perfectly elastic).
 - [ ] **5.8:** Friction impulse (tangential) — Coulomb kinetic friction model (§II.4).
-- [ ] **5.9:** `CollisionEvent` — event struct `{ entity_a, entity_b, normal, point, impulse_magnitude }`.
+- [x] **5.9:** `CollisionEvent` — event struct `{ entity_a, entity_b, normal, point, impulse_magnitude }`.
 - [ ] **5.10:** Sub-stepping for fast bodies — temporal subdivision (CCD-lite) to prevent tunneling.
 - [ ] **5.11:** Unit test: two spheres head-on collision — verify linear momentum conservation.
 - [ ] **5.12:** Unit test: sphere bouncing on plane — verify restitution coefficient behavior.

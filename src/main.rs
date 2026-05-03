@@ -25,6 +25,10 @@ fn main() {
     let integration_method = config.integration_method;
     world.insert_resource(config);
     world.insert_resource(time);
+    world.insert_resource(physics::EnergyMonitor::default());
+    world.insert_resource(crate::components::collisions::CollisionEvents::default());
+    world.insert_resource(physics::CandidatePairs(Vec::new()));
+    world.insert_resource(physics::KdTreeBroadphase::default());
 
     // --- Schedule Setup ---
     let mut schedule = Schedule::default();
@@ -35,11 +39,15 @@ fn main() {
     );
 
     // Stage 2: Force calculators (gravity, EM, etc.) — added in Phase 4+
+    schedule.add_systems(
+        physics::brute_force_gravity_system
+            .after(physics::reset_forces)
+    );
 
     // Stage 3: Compute acceleration from accumulated force
     schedule.add_systems(
         physics::compute_acceleration_system
-            .after(physics::reset_forces)
+            .after(physics::brute_force_gravity_system)
     );
 
     // Stage 4: Integration (position + velocity update)
@@ -86,6 +94,38 @@ fn main() {
     schedule.add_systems(
         physics::rotational_integration_system
             .after(physics::compute_acceleration_system)
+    );
+
+    // Stage 7.5: Collisions (Broadphase -> Narrowphase -> Impulse)
+    schedule.add_systems(
+        physics::build_broadphase_system
+            .after(physics::rotational_integration_system)
+            .after(physics::sector_boundary_system)
+    );
+    schedule.add_systems(
+        physics::broadphase_query_system
+            .after(physics::build_broadphase_system)
+    );
+    schedule.add_systems(
+        physics::narrow_phase_system
+            .after(physics::broadphase_query_system)
+    );
+    schedule.add_systems(
+        physics::collision_impulse_system
+            .after(physics::narrow_phase_system)
+    );
+
+    // Stage 8: Energy monitoring
+    schedule.add_systems(
+        (
+            physics::compute_kinetic_energy_system,
+            physics::compute_potential_energy_system,
+        ).after(physics::update_momentum_system)
+    );
+    schedule.add_systems(
+        physics::energy_drift_monitor_system
+            .after(physics::compute_kinetic_energy_system)
+            .after(physics::compute_potential_energy_system)
     );
 
     // --- Main Loop ---

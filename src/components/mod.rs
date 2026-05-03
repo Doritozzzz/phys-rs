@@ -3,6 +3,7 @@
 //! Components are pure data — no logic, no methods with side effects.
 //! Each module groups related physical quantities.
 
+pub mod collisions;
 pub mod dynamics;
 pub mod electromagnetic;
 pub mod identifiers;
