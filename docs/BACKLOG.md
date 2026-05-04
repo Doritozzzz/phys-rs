@@ -192,21 +192,21 @@
 
 ---
 
-## Phase 12: GPU Compute Pipeline
+## Phase 12: Hybrid CPU/GPU Pipeline
 
-> *All physics systems are validated on CPU first (Phases 0–11). This phase ports the
-> performance-critical hot paths to GPU compute shaders for massive parallelism.*
+> *Instead of emulating f64 on the GPU (which is slow and error-prone), we adopt a hybrid architecture.*
+> *N-Body Gravity and precise orbital mechanics remain on CPU (accelerated via `rayon` multithreading).*
+> *Fluid Dynamics (SPH), particles, and visual effects are offloaded to GPU compute (`wgpu` / `f32`).*
 
-- [ ] **12.1:** `src/gpu/mod.rs` — wgpu adapter selection, device/queue initialization.
-- [ ] **12.2:** `src/gpu/buffers.rs` — `encase` `StorageBuffer` wrappers for ECS → GPU data marshalling.
-- [ ] **12.3:** `src/gpu/pipeline.rs` — Compute pipeline abstraction (bind group layouts, shader modules, dispatch).
-- [ ] **12.4:** WGSL compute shader: pairwise gravity kernel.
-- [ ] **12.5:** WGSL compute shader: Velocity Verlet integration kernel.
-- [ ] **12.6:** WGSL compute shader: SPH density + pressure kernel.
-- [ ] **12.7:** GPU ↔ CPU synchronization system — read-back computed forces/positions into ECS components.
-- [ ] **12.8:** Hybrid CPU/GPU mode — automatic fallback to CPU systems if no compatible GPU detected.
-- [ ] **12.9:** Double-precision emulation in WGSL — `ds_add`, `ds_mul` pair arithmetic for f64 on f32 hardware.
-- [ ] **12.10:** Benchmark suite: CPU vs GPU gravity for 1K, 10K, 100K body counts.
+- [ ] **12.1:** Add `rayon` to dependencies and parallelize `brute_force_gravity_system` using `par_iter_mut` or parallel chunking.
+- [ ] **12.2:** Parallelize `gravity_tree.rs` Barnes-Hut traversal using `rayon`.
+- [ ] **12.3:** `src/gpu/mod.rs` — `wgpu` adapter selection, device/queue initialization for SPH.
+- [ ] **12.4:** `src/gpu/buffers.rs` — `encase` `StorageBuffer` wrappers for SPH ECS → GPU data marshalling.
+- [ ] **12.5:** WGSL compute shader: SPH density + pressure kernel (using native `f32`).
+- [ ] **12.6:** WGSL compute shader: SPH viscosity and position integration.
+- [ ] **12.7:** GPU ↔ CPU synchronization system — read-back SPH positions/velocities into ECS components.
+- [ ] **12.8:** CPU fallback — automatic fallback to CPU SPH systems if no compatible GPU detected.
+- [ ] **12.9:** Benchmark suite: CPU (Rayon) Gravity vs single-thread; GPU SPH vs CPU SPH for 100K fluid particles.
 
 ---
 

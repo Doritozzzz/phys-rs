@@ -622,10 +622,11 @@ mod tests {
                 let f = world.get::<Force>(*e).unwrap().0;
                 let m = world.get::<Mass>(*e).unwrap().0;
                 let acc = f / m;
-                let mut vel = world.get_mut::<Velocity>(*e).unwrap();
-                vel.0 += acc * dt;
-                let new_v = vel.0;
-                drop(vel);
+                {
+                    let mut vel = world.get_mut::<Velocity>(*e).unwrap();
+                    vel.0 += acc * dt;
+                }
+                let new_v = world.get::<Velocity>(*e).unwrap().0;
                 let mut pos = world.get_mut::<LocalPosition>(*e).unwrap();
                 pos.0 += new_v * dt;
             }

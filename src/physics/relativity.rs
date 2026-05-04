@@ -143,7 +143,7 @@ mod tests {
     /// Lorentz factor grows without bound as v → c (task 10.8).
     #[test]
     fn test_lorentz_factor_diverges() {
-        let gammas: Vec<f64> = vec![0.1, 0.5, 0.9, 0.99, 0.999, 0.9999]
+        let gammas: Vec<f64> = [0.1, 0.5, 0.9, 0.99, 0.999, 0.9999]
             .into_iter()
             .map(|beta| {
                 let v = beta * C;
@@ -172,7 +172,7 @@ mod tests {
     fn test_relativistic_momentum_diverges() {
         let m = 1.0_f64; // 1 kg
 
-        let betas = vec![0.1_f64, 0.5, 0.9, 0.99, 0.999];
+        let betas = [0.1_f64, 0.5, 0.9, 0.99, 0.999];
         let momenta: Vec<f64> = betas
             .iter()
             .map(|&beta| {

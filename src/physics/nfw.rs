@@ -187,7 +187,7 @@ mod tests {
         let rs = 1e20_f64;
 
         // Compute circular velocity at several radii beyond Rs
-        let radii = vec![5.0, 10.0, 20.0, 50.0, 100.0];
+        let radii = [5.0, 10.0, 20.0, 50.0, 100.0];
         let v_circs: Vec<f64> = radii
             .iter()
             .map(|&mult| nfw_circular_velocity(mult * rs, rho_0, rs))
@@ -216,7 +216,7 @@ mod tests {
         let rho_0 = 1.0_f64;
         let rs = 1.0_f64;
 
-        let radii = vec![0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 100.0];
+        let radii = [0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 100.0];
         let masses: Vec<f64> = radii
             .iter()
             .map(|&r| nfw_enclosed_mass(r, rho_0, rs))

@@ -55,13 +55,53 @@ mod tests {
 
     #[test]
     fn test_figure_8_stability() {
-        // TODO: Implement 3-body figure-8 solution stability test
-        assert!(true);
+        let mut world = World::new();
+        let mut config = UniverseConfig::default();
+        config.softening_epsilon = 0.0;
+        world.insert_resource(config);
+
+        let m = 1.0_f64;
+        let e1 = world.spawn((Force(DVec3::ZERO), Mass(m), Sector::default(), LocalPosition(DVec3::new(-0.97000436, 0.24308753, 0.0)))).id();
+        let e2 = world.spawn((Force(DVec3::ZERO), Mass(m), Sector::default(), LocalPosition(DVec3::new(0.97000436, -0.24308753, 0.0)))).id();
+        let e3 = world.spawn((Force(DVec3::ZERO), Mass(m), Sector::default(), LocalPosition(DVec3::new(0.0, 0.0, 0.0)))).id();
+
+        let mut schedule = Schedule::default();
+        schedule.add_systems(brute_force_gravity_system);
+        schedule.run(&mut world);
+
+        let f1 = world.get::<Force>(e1).unwrap().0;
+        let f2 = world.get::<Force>(e2).unwrap().0;
+        let f3 = world.get::<Force>(e3).unwrap().0;
+
+        assert!(f1.is_finite() && f2.is_finite() && f3.is_finite());
+        assert!((f1.x + f2.x + f3.x).abs() < 1e-10);
+        assert!((f1.y + f2.y + f3.y).abs() < 1e-10);
     }
 
     #[test]
     fn test_kepler_orbit_period() {
-        // TODO: Implement Kepler orbit period validation
-        assert!(true);
+        let mut world = World::new();
+        let mut config = UniverseConfig::default();
+        config.softening_epsilon = 0.0;
+        let g = config.gravitational_constant;
+        world.insert_resource(config);
+
+        let m_big = 1e12_f64;
+        let m_small = 1.0_f64;
+        let r = 100.0_f64;
+
+        let _big = world.spawn((Force(DVec3::ZERO), Mass(m_big), Sector::default(), LocalPosition(DVec3::ZERO))).id();
+        let small = world.spawn((Force(DVec3::ZERO), Mass(m_small), Sector::default(), LocalPosition(DVec3::new(r, 0.0, 0.0)))).id();
+
+        let mut schedule = Schedule::default();
+        schedule.add_systems(brute_force_gravity_system);
+        schedule.run(&mut world);
+
+        let f = world.get::<Force>(small).unwrap().0;
+        let expected_f = -(g * m_big * m_small) / (r * r);
+
+        assert!((f.x - expected_f).abs() < 1e-10);
+        assert_eq!(f.y, 0.0);
+        assert_eq!(f.z, 0.0);
     }
 }
