@@ -16,6 +16,14 @@ use crate::core::coordinates::{displacement, LocalPosition, Sector};
 /// - Softening: Uses denominator `r^2 + ε^2` to prevent singularity.
 /// - Precision: `f64` and `DVec3` exclusively.
 /// - Overflow prevention: Multiplies `G * m1` before `m2` to keep values moderate.
+use rayon::prelude::*;
+
+#[derive(Clone, Copy)]
+struct BodyData {
+    pos: DVec3,
+    mass: f64,
+}
+
 pub fn brute_force_gravity_system(
     mut query: Query<(&mut Force, &Mass, &Sector, &LocalPosition)>,
     config: Res<UniverseConfig>,
@@ -24,28 +32,44 @@ pub fn brute_force_gravity_system(
     let eps2 = config.softening_epsilon * config.softening_epsilon;
     let sector_size = config.sector_size;
 
-    let mut iter = query.iter_combinations_mut();
-    while let Some([a, b]) = iter.fetch_next() {
-        let (mut force_a, mass_a, sector_a, local_a) = a;
-        let (mut force_b, mass_b, sector_b, local_b) = b;
+    let mut bodies = Vec::with_capacity(query.iter().len());
+    let mut origin_sector = None;
 
-        // r_vec points from a to b
-        let r_vec = displacement(sector_a, local_a, sector_b, local_b, sector_size);
-        let r2 = r_vec.length_squared();
+    for (_, mass, sector, local) in query.iter() {
+        let origin = *origin_sector.get_or_insert(*sector);
+        let sector_delta = sector.0 - origin.0;
+        let abs_pos = DVec3::new(
+            sector_delta.x as f64 * sector_size + local.0.x,
+            sector_delta.y as f64 * sector_size + local.0.y,
+            sector_delta.z as f64 * sector_size + local.0.z,
+        );
+        bodies.push(BodyData { pos: abs_pos, mass: mass.0 });
+    }
 
-        let softened_r2 = r2 + eps2;
-        let softened_r = softened_r2.sqrt();
-        let softened_r3 = softened_r2 * softened_r;
+    if bodies.len() < 2 {
+        return;
+    }
 
-        // Force on A points toward B (in direction of r_vec)
-        // Order of multiplication: (G * m1) * m2 to prevent large*large overflow.
-        let scalar_f = ((g * mass_a.0) * mass_b.0) / softened_r3;
-        let f_vec = r_vec * scalar_f;
+    let forces: Vec<DVec3> = bodies.par_iter().enumerate().map(|(i, target)| {
+        let mut force_sum = DVec3::ZERO;
+        for (j, source) in bodies.iter().enumerate() {
+            if i == j { continue; }
+            
+            let r_vec = source.pos - target.pos;
+            let r2 = r_vec.length_squared();
+            let softened_r2 = r2 + eps2;
+            let softened_r = softened_r2.sqrt();
+            let softened_r3 = softened_r2 * softened_r;
+            
+            let scalar_f = ((g * target.mass) * source.mass) / softened_r3;
+            force_sum += r_vec * scalar_f;
+        }
+        debug_assert!(force_sum.is_finite(), "NaN/Inf detected in brute_force_gravity_system");
+        force_sum
+    }).collect();
 
-        debug_assert!(f_vec.is_finite(), "NaN/Inf detected in brute_force_gravity_system");
-
-        force_a.0 += f_vec;
-        force_b.0 -= f_vec;
+    for ((mut force, _, _, _), computed_force) in query.iter_mut().zip(forces.iter()) {
+        force.0 += *computed_force;
     }
 }
 

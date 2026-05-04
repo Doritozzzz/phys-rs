@@ -17,6 +17,7 @@ parry3d-f64 = "0.26.0"
 wgpu = "29.0.1"
 winit = "0.30.13"
 rayon = "1.10.0"
+pollster = "0.3.0"
 
 [profile.release]
 opt-level = 3

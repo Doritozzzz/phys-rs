@@ -17,6 +17,7 @@
 
 use bevy_ecs::prelude::*;
 use glam::DVec3;
+use rayon::prelude::*;
 
 use crate::components::dynamics::{Force, Mass};
 use crate::core::config::UniverseConfig;
@@ -322,12 +323,11 @@ pub fn barnes_hut_gravity_system(
     }
 
     // ── Step 4: Compute forces ────────────────────────────────────
-    let mut forces: Vec<DVec3> = Vec::with_capacity(bodies.len());
-    for body in &bodies {
+    let forces: Vec<DVec3> = bodies.par_iter().map(|body| {
         let f = root.compute_force(body, theta, g, eps2);
         debug_assert!(f.is_finite(), "NaN/Inf in Barnes-Hut force for body {}", body.index);
-        forces.push(f);
-    }
+        f
+    }).collect();
 
     // ── Step 5: Write forces back to ECS ──────────────────────────
     for (i, entity) in entities.iter().enumerate() {

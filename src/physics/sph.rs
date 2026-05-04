@@ -80,7 +80,16 @@ pub fn sph_density_system(
     ), With<FluidParticle>>,
     candidate_pairs: Res<CandidatePairs>,
     config: Res<UniverseConfig>,
+    gpu_context: Option<Res<crate::gpu::GpuContext>>,
 ) {
+    if let Some(_gpu) = gpu_context {
+        // TODO: (Phase 12.7) Implement actual GPU synchronization.
+        // 1. Extract `query` data into `f32` vectors.
+        // 2. Upload to `gpu::buffers::create_storage_buffer`.
+        // 3. Dispatch `SphPipeline::density_pipeline`.
+        // 4. Read back densities and update ECS.
+        // For now, fallback to CPU implementation:
+    }
     // Self-contribution: W(0, h) for each particle
     for (_, _, _, mass, h, mut density) in &mut query {
         density.0 = mass.0 * cubic_spline_kernel(0.0_f64, h.0);
