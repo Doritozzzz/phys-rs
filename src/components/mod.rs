@@ -8,14 +8,15 @@ pub mod dynamics;
 pub mod electromagnetic;
 pub mod identifiers;
 pub mod material;
+#[cfg(feature = "nuclear")]
+pub mod nuclear;
 pub mod rotational;
 pub mod spatial;
 pub mod sph;
 pub mod thermal;
 
 pub use dynamics::{
-    Acceleration, Force, LinearMomentum, LorentzFactor, DopplerShift, RelativisticMomentum,
-    Mass, PreviousAcceleration, Velocity,
+    Acceleration, Force, LinearMomentum, Mass, PreviousAcceleration, Velocity,
 };
 pub use electromagnetic::{ChargedBody, DivCleaningPsi, ElectricField, MagneticField};
 pub use identifiers::{BodyType, EntityName};

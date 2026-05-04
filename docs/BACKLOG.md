@@ -183,12 +183,12 @@
 
 > *Feature-gated behind `--features nuclear` to keep compile times lean during early development.*
 
-- [ ] **11.1:** Mass-energy equivalence — `E = Δm·c²` energy release calculator (§IX.1).
-- [ ] **11.2:** Gamow peak reaction rate — fusion yield as function of T and ρ (§IX.1).
-- [ ] **11.3:** Degeneracy pressure model — Fermi gas limit `P ∝ ρ^(5/3)` (§IX.2).
-- [ ] **11.4:** Stellar lifecycle state machine — Main Sequence → Red Giant → White Dwarf / Neutron Star / Black Hole.
-- [ ] **11.5:** Chandrasekhar mass limit check — triggers supernova collapse event when exceeded.
-- [ ] **11.6:** Unit test: core collapse triggers when mass > 1.4 M☉ (Chandrasekhar limit).
+- [x] **11.1:** Mass-energy equivalence — `E = Δm·c²` energy release calculator (§IX.1).
+- [x] **11.2:** Gamow peak reaction rate — fusion yield as function of T and ρ (§IX.1).
+- [x] **11.3:** Degeneracy pressure model — Fermi gas limit `P ∝ ρ^(5/3)` (§IX.2).
+- [x] **11.4:** Stellar lifecycle state machine — Main Sequence → Red Giant → White Dwarf / Neutron Star / Black Hole.
+- [x] **11.5:** Chandrasekhar mass limit check — triggers supernova collapse event when exceeded.
+- [x] **11.6:** Unit test: core collapse triggers when mass > 1.4 M☉ (Chandrasekhar limit).
 
 ---
 

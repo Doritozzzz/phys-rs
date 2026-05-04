@@ -24,4 +24,10 @@ pub enum BodyType {
     Particle,
     /// SPH fluid element.
     FluidParticle,
+    /// Stellar remnant: White Dwarf.
+    WhiteDwarf,
+    /// Stellar remnant: Neutron Star.
+    NeutronStar,
+    /// Stellar remnant: Black Hole.
+    BlackHole,
 }

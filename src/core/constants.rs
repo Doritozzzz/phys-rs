@@ -45,6 +45,9 @@ pub const EARTH_MASS: f64 = 5.972e24_f64;
 /// Lunar mass [kg]
 pub const LUNAR_MASS: f64 = 7.342e22_f64;
 
+/// Proton mass [kg] (CODATA 2018)
+pub const PROTON_MASS: f64 = 1.67262192369e-27_f64;
+
 /// Astronomical unit AU [m] (IAU 2012 exact)
 pub const AU: f64 = 1.495978707e11_f64;
 

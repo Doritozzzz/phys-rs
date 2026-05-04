@@ -21,6 +21,8 @@ pub mod relativity;
 pub mod rigid_body;
 pub mod sph;
 pub mod thermodynamics;
+#[cfg(feature = "nuclear")]
+pub mod nuclear;
 
 pub use broadphase::{
     broadphase_query_system, build_broadphase_system, CandidatePairs, KdTreeBroadphase,

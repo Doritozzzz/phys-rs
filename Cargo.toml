@@ -3,6 +3,10 @@ name = "phys-rs"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+default = []
+nuclear = []
+
 [dependencies]
 bevy_ecs = "0.18.1"
 encase = "0.12.0"
