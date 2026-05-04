@@ -13,7 +13,10 @@ pub mod spatial;
 pub mod sph;
 pub mod thermal;
 
-pub use dynamics::{Acceleration, Force, LinearMomentum, Mass, PreviousAcceleration, Velocity};
+pub use dynamics::{
+    Acceleration, Force, LinearMomentum, LorentzFactor, DopplerShift, RelativisticMomentum,
+    Mass, PreviousAcceleration, Velocity,
+};
 pub use electromagnetic::{ChargedBody, DivCleaningPsi, ElectricField, MagneticField};
 pub use identifiers::{BodyType, EntityName};
 pub use material::{Charge, Density, Luminosity, Opacity, Temperature};

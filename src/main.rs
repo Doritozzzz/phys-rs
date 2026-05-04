@@ -36,6 +36,7 @@ fn main() {
     world.insert_resource(physics::RadiationConfig::default());
     world.insert_resource(physics::ThermalConductionConfig::default());
     world.insert_resource(physics::MhdConfig::default());
+    world.insert_resource(physics::NfwHaloConfig::default());
 
     // --- Schedule Setup ---
     let mut schedule = Schedule::default();
@@ -64,12 +65,23 @@ fn main() {
             .after(physics::broadphase_query_system)
     );
     schedule.add_systems(
+        physics::nfw_gravity_system
+            .after(physics::broadphase_query_system)
+    );
+    schedule.add_systems(
         physics::coulomb_force_system
             .after(physics::broadphase_query_system)
     );
     schedule.add_systems(
         physics::lorentz_force_system
             .after(physics::broadphase_query_system)
+    );
+
+    // Stage 2.1: GR Corrections
+    schedule.add_systems(
+        physics::geodesic_correction_system
+            .after(physics::brute_force_gravity_system)
+            .after(physics::nfw_gravity_system)
     );
 
     // Stage 2.5: SPH fluid dynamics pipeline (§V)
@@ -101,6 +113,8 @@ fn main() {
     schedule.add_systems(
         physics::compute_acceleration_system
             .after(physics::brute_force_gravity_system)
+            .after(physics::nfw_gravity_system)
+            .after(physics::geodesic_correction_system)
             .after(physics::coulomb_force_system)
             .after(physics::lorentz_force_system)
             .after(physics::sph_pressure_force_system)
@@ -154,6 +168,18 @@ fn main() {
             .after(physics::mhd_induction_system)
     );
 
+    // Stage 4.7: Relativistic updates
+    schedule.add_systems(
+        (
+            physics::compute_lorentz_factor_system,
+            physics::relativistic_momentum_system,
+            physics::compute_doppler_shift_system,
+        )
+            .after(physics::velocity_verlet_velocity_system)
+            .after(physics::semi_implicit_euler_system)
+            .after(physics::rk4_system)
+    );
+
     // Stage 5: Sector boundary normalization
     schedule.add_systems(
         physics::sector_boundary_system
@@ -181,6 +207,12 @@ fn main() {
             .after(physics::compute_angular_acceleration_system)
             .after(physics::damping_system)
             .after(physics::velocity_verlet_velocity_system)
+    );
+
+    // Stage 7.1: Lense-Thirring frame-dragging
+    schedule.add_systems(
+        physics::lense_thirring_system
+            .after(physics::rotational_integration_system)
     );
 
     // Stage 7.5: Narrowphase collisions & impulse resolution

@@ -167,15 +167,15 @@
 
 ## Phase 10: Relativistic & Cosmological Physics
 
-- [ ] **10.1:** Lorentz factor computation — `γ = 1/√(1 - v²/c²)` with clamping for v ≈ c (§VIII).
-- [ ] **10.2:** Relativistic momentum correction — `p = γm₀v` applied when `v > 0.1c` (§VIII).
-- [ ] **10.3:** Relativistic Doppler shift calculator (§VIII) — stored for rendering use.
-- [ ] **10.4:** Schwarzschild radius calculator — `r_s = 2GM/c²` (§IV.3).
-- [ ] **10.5:** NFW dark matter halo profile (§X.1) — phantom gravitational acceleration field `ρ(r) = ρ₀ / [(r/Rs)(1 + r/Rs)²]`.
-- [ ] **10.6:** Schwarzschild geodesic integrator (§X.2) — ray-marching for photon paths near black holes.
-- [ ] **10.7:** Lense-Thirring frame-dragging precession (§X.2) — `Ω_LT` near massive rotating bodies.
-- [ ] **10.8:** Unit test: relativistic momentum diverges as v → c.
-- [ ] **10.9:** Unit test: photon circular orbit at r = 1.5·r_s (photon sphere).
+- [x] **10.1:** Lorentz factor computation — `γ = 1/√(1 - v²/c²)` with clamping for v ≈ c (§VIII).
+- [x] **10.2:** Relativistic momentum correction — `p = γm₀v` applied when `v > 0.1c` (§VIII).
+- [x] **10.3:** Relativistic Doppler shift calculator (§VIII) — stored for rendering use.
+- [x] **10.4:** Schwarzschild radius calculator — `r_s = 2GM/c²` (§IV.3).
+- [x] **10.5:** NFW dark matter halo profile (§X.1) — phantom gravitational acceleration field `ρ(r) = ρ₀ / [(r/Rs)(1 + r/Rs)²]`.
+- [x] **10.6:** Schwarzschild geodesic integrator (§X.2) — ray-marching for photon paths near black holes.
+- [x] **10.7:** Lense-Thirring frame-dragging precession (§X.2) — `Ω_LT` near massive rotating bodies.
+- [x] **10.8:** Unit test: relativistic momentum diverges as v → c.
+- [x] **10.9:** Unit test: photon circular orbit at r = 1.5·r_s (photon sphere).
 
 ---
 

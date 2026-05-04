@@ -41,3 +41,39 @@ pub struct PreviousAcceleration(pub DVec3);
 /// `p = m * v`. Updated after integration for conservation tracking.
 #[derive(Component, Debug, Clone, Copy, PartialEq, Default)]
 pub struct LinearMomentum(pub DVec3);
+
+/// Lorentz factor γ [dimensionless] (PHYSICS_MASTER_INDEX §VIII).
+///
+/// `γ = 1 / √(1 - v²/c²)`. Cached per entity each tick.
+/// Equals 1.0 for non-relativistic bodies (v << c).
+/// Opt-in: only entities with this component participate in SR corrections.
+#[derive(Component, Debug, Clone, Copy, PartialEq)]
+pub struct LorentzFactor(pub f64);
+
+impl Default for LorentzFactor {
+    fn default() -> Self {
+        Self(1.0_f64)
+    }
+}
+
+/// Relativistic Doppler shift ratio [dimensionless] (PHYSICS_MASTER_INDEX §VIII).
+///
+/// `f_obs / f_emit = √((1 - v_r/c) / (1 + v_r/c))` where v_r is
+/// the radial velocity toward the observer. Stored for rendering use.
+/// - Values < 1.0 → redshift (receding)
+/// - Values > 1.0 → blueshift (approaching)
+#[derive(Component, Debug, Clone, Copy, PartialEq)]
+pub struct DopplerShift(pub f64);
+
+impl Default for DopplerShift {
+    fn default() -> Self {
+        Self(1.0_f64)
+    }
+}
+
+/// Relativistic momentum [kg m s⁻¹] (PHYSICS_MASTER_INDEX §VIII).
+///
+/// `p = γ m₀ v`. Diverges as v → c. Tracked alongside classical
+/// `LinearMomentum` for relativistic bodies.
+#[derive(Component, Debug, Clone, Copy, PartialEq, Default)]
+pub struct RelativisticMomentum(pub DVec3);
