@@ -35,6 +35,7 @@ fn main() {
     world.insert_resource(physics::SphBoundaryConfig::default());
     world.insert_resource(physics::RadiationConfig::default());
     world.insert_resource(physics::ThermalConductionConfig::default());
+    world.insert_resource(physics::MhdConfig::default());
 
     // --- Schedule Setup ---
     let mut schedule = Schedule::default();
@@ -56,9 +57,18 @@ fn main() {
             .after(physics::build_broadphase_system)
     );
 
-    // Stage 2: Gravitational force calculator
+    // Stage 2: Force calculators (gravity + electromagnetism)
+    // All run in parallel after broadphase, accumulating into shared Force.
     schedule.add_systems(
         physics::brute_force_gravity_system
+            .after(physics::broadphase_query_system)
+    );
+    schedule.add_systems(
+        physics::coulomb_force_system
+            .after(physics::broadphase_query_system)
+    );
+    schedule.add_systems(
+        physics::lorentz_force_system
             .after(physics::broadphase_query_system)
     );
 
@@ -91,6 +101,8 @@ fn main() {
     schedule.add_systems(
         physics::compute_acceleration_system
             .after(physics::brute_force_gravity_system)
+            .after(physics::coulomb_force_system)
+            .after(physics::lorentz_force_system)
             .after(physics::sph_pressure_force_system)
             .after(physics::sph_viscosity_system)
             .after(physics::sph_boundary_system)
@@ -128,6 +140,18 @@ fn main() {
     schedule.add_systems(
         physics::sph_xsph_system
             .after(physics::velocity_verlet_velocity_system)
+    );
+
+    // Stage 4.6: MHD field evolution (§V.4, §VII.1)
+    //   Induction equation updates B from velocity field,
+    //   then divergence cleaning enforces ∇·B = 0.
+    schedule.add_systems(
+        physics::mhd_induction_system
+            .after(physics::sph_xsph_system)
+    );
+    schedule.add_systems(
+        physics::divergence_cleaning_system
+            .after(physics::mhd_induction_system)
     );
 
     // Stage 5: Sector boundary normalization

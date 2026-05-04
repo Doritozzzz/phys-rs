@@ -14,7 +14,7 @@ pub mod sph;
 pub mod thermal;
 
 pub use dynamics::{Acceleration, Force, LinearMomentum, Mass, PreviousAcceleration, Velocity};
-pub use electromagnetic::{ElectricField, MagneticField};
+pub use electromagnetic::{ChargedBody, DivCleaningPsi, ElectricField, MagneticField};
 pub use identifiers::{BodyType, EntityName};
 pub use material::{Charge, Density, Luminosity, Opacity, Temperature};
 pub use rotational::{AngularVelocity, InertiaTensor, Orientation, Torque};

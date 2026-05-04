@@ -5,11 +5,14 @@
 
 pub mod broadphase;
 pub mod collisions;
+pub mod electrostatics;
 pub mod energy;
 pub mod forces;
 pub mod gravity;
 pub mod gravity_tree;
 pub mod integrators;
+pub mod lorentz;
+pub mod mhd;
 pub mod orbital;
 pub mod origin;
 pub mod rigid_body;
@@ -20,6 +23,7 @@ pub use broadphase::{
     broadphase_query_system, build_broadphase_system, CandidatePairs, KdTreeBroadphase,
 };
 pub use collisions::{collision_impulse_system, narrow_phase_system};
+pub use electrostatics::coulomb_force_system;
 pub use energy::{
     compute_kinetic_energy_system, compute_potential_energy_system, energy_drift_monitor_system,
     EnergyMonitor,
@@ -32,6 +36,8 @@ pub use integrators::{
     semi_implicit_euler_system, update_momentum_system, velocity_verlet_position_system,
     velocity_verlet_velocity_system,
 };
+pub use lorentz::lorentz_force_system;
+pub use mhd::{divergence_cleaning_system, mhd_induction_system, MhdConfig};
 pub use orbital::{escape_velocity, roche_limit, schwarzschild_radius, vis_viva_velocity};
 pub use origin::sector_boundary_system;
 pub use rigid_body::*;
@@ -45,3 +51,4 @@ pub use thermodynamics::{
     radiative_cooling_system, wien_peak_wavelength, ideal_gas_pressure,
     ThermalBody, RadiationConfig, ThermalConductionConfig,
 };
+

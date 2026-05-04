@@ -41,6 +41,12 @@ pub struct UniverseConfig {
     /// Lower values = more accurate but slower.
     pub barnes_hut_theta: f64,
 
+    /// Electromagnetic softening parameter ε_em [m].
+    /// Softens the Coulomb denominator: `r² + ε_em²` to prevent singularity.
+    /// Independent from gravitational softening — EM interactions may
+    /// operate at different characteristic length scales.
+    pub em_softening_epsilon: f64,
+
     /// Active numerical integration method.
     pub integration_method: IntegrationMethod,
 
@@ -58,6 +64,7 @@ impl Default for UniverseConfig {
         Self {
             gravitational_constant: super::constants::G,
             softening_epsilon: 1e-4_f64,
+            em_softening_epsilon: 1e-4_f64,
             // For CCD-lite (Sub-stepping), we enforce a small max_dt.
             // When the simulation runs, if the elapsed frame time is larger than max_dt,
             // the fixed timestep accumulator will run the physics schedule multiple times.

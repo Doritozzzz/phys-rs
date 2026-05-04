@@ -154,14 +154,14 @@
 
 ## Phase 9: Electromagnetism
 
-- [ ] **9.1:** `src/physics/electrostatics.rs` — Coulomb force with softening (§VII.2): `F = kₑ·q₁·q₂/(r² + ε²)`.
-- [ ] **9.2:** Lorentz force system — `F = q(E + v×B)` (§VII.2).
-- [ ] **9.3:** `src/components/electromagnetic.rs` — `ElectricField(DVec3)`, `MagneticField(DVec3)`.
-- [ ] **9.4:** Charge-based force accumulation — runs alongside gravity in force pipeline.
-- [ ] **9.5:** MHD induction equation system (§V.4) — `∂B/∂t = ∇×(v×B) + η∇²B`.
-- [ ] **9.6:** Divergence cleaning for `∇·B = 0` constraint (§VII.1).
-- [ ] **9.7:** Unit test: two charged particles — stable Coulomb orbit.
-- [ ] **9.8:** Unit test: charged particle in uniform B field — circular Larmor orbit radius matches `r = mv/(qB)`.
+- [x] **9.1:** `src/physics/electrostatics.rs` — Coulomb force with softening (§VII.2): `F = kₑ·q₁·q₂/(r² + ε²)`.
+- [x] **9.2:** Lorentz force system — `F = q(E + v×B)` (§VII.2).
+- [x] **9.3:** `src/components/electromagnetic.rs` — `ElectricField(DVec3)`, `MagneticField(DVec3)`, `DivCleaningPsi(f64)`, `ChargedBody` marker.
+- [x] **9.4:** Charge-based force accumulation — runs alongside gravity in force pipeline.
+- [x] **9.5:** MHD induction equation system (§V.4) — `∂B/∂t = ∇×(v×B) + η∇²B`.
+- [x] **9.6:** Divergence cleaning for `∇·B = 0` constraint (§VII.1) — Dedner hyperbolic/parabolic scheme.
+- [x] **9.7:** Unit test: two charged particles — stable Coulomb orbit.
+- [x] **9.8:** Unit test: charged particle in uniform B field — circular Larmor orbit radius matches `r = mv/(qB)`.
 
 ---
 
