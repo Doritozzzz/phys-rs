@@ -11,8 +11,8 @@ struct SphParams {
     _padding: u32,
 }
 
-@group(0) @binding(0) var<storage, read> positions: array<vec4<f32>>;
-@group(0) @binding(1) var<storage, read> velocities: array<vec4<f32>>;
+@group(0) @binding(0) var<storage, read_write> positions: array<vec4<f32>>;
+@group(0) @binding(1) var<storage, read_write> velocities: array<vec4<f32>>;
 @group(0) @binding(2) var<storage, read_write> densities: array<f32>;
 @group(0) @binding(3) var<storage, read_write> pressures: array<f32>;
 @group(0) @binding(4) var<storage, read_write> forces: array<vec4<f32>>;
