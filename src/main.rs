@@ -39,225 +39,191 @@ fn main() {
     world.insert_resource(physics::NfwHaloConfig::default());
 
     // --- Schedule Setup ---
+    //
+    // IMPORTANT: bevy_ecs 0.18 forbids `.after(SystemTypeSet(fn))` when the
+    // same function appears more than once in the schedule (e.g., Velocity
+    // Verlet's second force evaluation duplicates the first-pass systems).
+    // We split into ≤21-element `.chain()` groups and use `.after()` only
+    // with systems that appear EXACTLY ONCE in each branch.
+    //
+    // The entire pipeline lives inside the match block so each integration
+    // method produces exactly one schedule topology.
     let mut schedule = Schedule::default();
 
-    // Stage 1: Reset accumulators
-    schedule.add_systems(
-        (physics::reset_forces, physics::reset_torques)
-    );
-
-    // Stage 1.5: Spatial partitioning (broadphase)
-    // Runs early so gravity tree, SPH, and collisions can all use the
-    // K-D tree neighbor data from a single build per tick.
-    schedule.add_systems(
-        physics::build_broadphase_system
-            .after(physics::reset_forces)
-    );
-    schedule.add_systems(
-        physics::broadphase_query_system
-            .after(physics::build_broadphase_system)
-    );
-
-    // Stage 2: Force calculators (gravity + electromagnetism)
-    // All run in parallel after broadphase, accumulating into shared Force.
-    schedule.add_systems(
-        physics::brute_force_gravity_system
-            .after(physics::broadphase_query_system)
-    );
-    schedule.add_systems(
-        physics::nfw_gravity_system
-            .after(physics::broadphase_query_system)
-    );
-    schedule.add_systems(
-        physics::coulomb_force_system
-            .after(physics::broadphase_query_system)
-    );
-    schedule.add_systems(
-        physics::lorentz_force_system
-            .after(physics::broadphase_query_system)
-    );
-
-    // Stage 2.1: GR Corrections
-    schedule.add_systems(
-        physics::geodesic_correction_system
-            .after(physics::brute_force_gravity_system)
-            .after(physics::nfw_gravity_system)
-    );
-
-    // Stage 2.5: SPH fluid dynamics pipeline (§V)
-    //   density → equation of state → pressure force → viscosity
-    schedule.add_systems(
-        physics::sph_density_system
-            .after(physics::broadphase_query_system)
-    );
-    schedule.add_systems(
-        physics::sph_eos_system
-            .after(physics::sph_density_system)
-    );
-    schedule.add_systems(
-        physics::sph_pressure_force_system
-            .after(physics::sph_eos_system)
-    );
-    schedule.add_systems(
-        physics::sph_viscosity_system
-            .after(physics::sph_eos_system)
-    );
-
-    // Stage 2.7: Boundary repulsion for domain-confined SPH
-    schedule.add_systems(
-        physics::sph_boundary_system
-            .after(physics::sph_viscosity_system)
-    );
-
-    // Stage 3: Compute acceleration from ALL accumulated forces
-    schedule.add_systems(
-        physics::compute_acceleration_system
-            .after(physics::brute_force_gravity_system)
-            .after(physics::nfw_gravity_system)
-            .after(physics::geodesic_correction_system)
-            .after(physics::coulomb_force_system)
-            .after(physics::lorentz_force_system)
-            .after(physics::sph_pressure_force_system)
-            .after(physics::sph_viscosity_system)
-            .after(physics::sph_boundary_system)
-    );
-
-    // Stage 4: Integration (position + velocity update)
     match integration_method {
         IntegrationMethod::SemiImplicitEuler => {
-            schedule.add_systems(
-                physics::semi_implicit_euler_system
-                    .after(physics::compute_acceleration_system)
-            );
+            // Group 1: force evaluation (16 systems)
+            schedule.add_systems((
+                physics::reset_forces,
+                physics::reset_torques,
+                physics::build_broadphase_system,
+                physics::broadphase_query_system,
+                physics::brute_force_gravity_system,
+                physics::nfw_gravity_system,
+                physics::coulomb_force_system,
+                physics::lorentz_force_system,
+                physics::geodesic_correction_system,
+                physics::sph_density_system,
+                physics::sph_eos_system,
+                physics::sph_pressure_force_system,
+                physics::sph_viscosity_system,
+                physics::sph_boundary_system,
+                physics::compute_acceleration_system,
+            ).chain());
+
+            // Group 2: integration + post-integration (8 systems, after group 1)
+            schedule.add_systems((
+                physics::semi_implicit_euler_system,
+                physics::sph_xsph_system,
+                physics::mhd_induction_system,
+                physics::divergence_cleaning_system,
+                physics::compute_lorentz_factor_system,
+                physics::relativistic_momentum_system,
+                physics::compute_doppler_shift_system,
+                physics::sector_boundary_system,
+            ).chain().after(physics::compute_acceleration_system));
+
+            // Group 3: rest of pipeline (14 systems, sector_boundary unique in branch)
+            schedule.add_systems((
+                physics::update_momentum_system,
+                physics::compute_angular_acceleration_system,
+                physics::damping_system,
+                physics::rotational_integration_system,
+                physics::lense_thirring_system,
+                physics::narrow_phase_system,
+                physics::collision_impulse_system,
+                physics::compute_kinetic_energy_system,
+                physics::compute_potential_energy_system,
+                physics::energy_drift_monitor_system,
+                physics::sync_temperature_system,
+                physics::heat_conduction_system,
+                physics::radiative_cooling_system,
+                physics::sync_internal_energy_system,
+            ).chain().after(physics::sector_boundary_system));
         }
         IntegrationMethod::VelocityVerlet => {
-            schedule.add_systems(
-                physics::velocity_verlet_position_system
-                    .after(physics::compute_acceleration_system)
-            );
-            // NOTE: Verlet velocity step needs a second force evaluation.
-            // For now, we approximate with single-evaluation Verlet.
-            schedule.add_systems(
-                physics::velocity_verlet_velocity_system
-                    .after(physics::velocity_verlet_position_system)
-            );
+            // Pass 1 — force evaluation + Verlet position step (16 systems)
+            schedule.add_systems((
+                physics::reset_forces,
+                physics::reset_torques,
+                physics::build_broadphase_system,
+                physics::broadphase_query_system,
+                physics::brute_force_gravity_system,
+                physics::nfw_gravity_system,
+                physics::coulomb_force_system,
+                physics::lorentz_force_system,
+                physics::geodesic_correction_system,
+                physics::sph_density_system,
+                physics::sph_eos_system,
+                physics::sph_pressure_force_system,
+                physics::sph_viscosity_system,
+                physics::sph_boundary_system,
+                physics::compute_acceleration_system,
+                physics::velocity_verlet_position_system,
+            ).chain());
+
+            // Pass 2a — SECOND force evaluation + Verlet velocity step (17 systems)
+            // velocity_verlet_position_system appears only in Pass 1 → unambiguous
+            schedule.add_systems((
+                physics::reset_forces,
+                physics::reset_torques,
+                physics::build_broadphase_system,
+                physics::broadphase_query_system,
+                physics::brute_force_gravity_system,
+                physics::nfw_gravity_system,
+                physics::coulomb_force_system,
+                physics::lorentz_force_system,
+                physics::geodesic_correction_system,
+                physics::sph_density_system,
+                physics::sph_eos_system,
+                physics::sph_pressure_force_system,
+                physics::sph_viscosity_system,
+                physics::sph_boundary_system,
+                physics::compute_acceleration_system,
+                physics::velocity_verlet_velocity_system,
+            ).chain().after(physics::velocity_verlet_position_system));
+
+            // Pass 2b — post-integration + momentum + rotational + collisions (14 systems)
+            schedule.add_systems((
+                physics::sph_xsph_system,
+                physics::mhd_induction_system,
+                physics::divergence_cleaning_system,
+                physics::compute_lorentz_factor_system,
+                physics::relativistic_momentum_system,
+                physics::compute_doppler_shift_system,
+                physics::sector_boundary_system,
+                physics::update_momentum_system,
+                physics::compute_angular_acceleration_system,
+                physics::damping_system,
+                physics::rotational_integration_system,
+                physics::lense_thirring_system,
+                physics::narrow_phase_system,
+                physics::collision_impulse_system,
+            ).chain().after(physics::velocity_verlet_velocity_system));
+
+            // Pass 2c — energy + thermodynamics (7 systems)
+            // collision_impulse_system appears only once in this branch → unambiguous
+            schedule.add_systems((
+                physics::compute_kinetic_energy_system,
+                physics::compute_potential_energy_system,
+                physics::energy_drift_monitor_system,
+                physics::sync_temperature_system,
+                physics::heat_conduction_system,
+                physics::radiative_cooling_system,
+                physics::sync_internal_energy_system,
+            ).chain().after(physics::collision_impulse_system));
         }
         IntegrationMethod::RungeKutta4 => {
-            schedule.add_systems(
-                physics::rk4_system
-                    .after(physics::compute_acceleration_system)
-            );
+            // Group 1: force evaluation (16 systems)
+            schedule.add_systems((
+                physics::reset_forces,
+                physics::reset_torques,
+                physics::build_broadphase_system,
+                physics::broadphase_query_system,
+                physics::brute_force_gravity_system,
+                physics::nfw_gravity_system,
+                physics::coulomb_force_system,
+                physics::lorentz_force_system,
+                physics::geodesic_correction_system,
+                physics::sph_density_system,
+                physics::sph_eos_system,
+                physics::sph_pressure_force_system,
+                physics::sph_viscosity_system,
+                physics::sph_boundary_system,
+                physics::compute_acceleration_system,
+            ).chain());
+
+            // Group 2: integration + post-integration (8 systems, after group 1)
+            schedule.add_systems((
+                physics::rk4_system,
+                physics::sph_xsph_system,
+                physics::mhd_induction_system,
+                physics::divergence_cleaning_system,
+                physics::compute_lorentz_factor_system,
+                physics::relativistic_momentum_system,
+                physics::compute_doppler_shift_system,
+                physics::sector_boundary_system,
+            ).chain().after(physics::compute_acceleration_system));
+
+            // Group 3: rest of pipeline (14 systems)
+            schedule.add_systems((
+                physics::update_momentum_system,
+                physics::compute_angular_acceleration_system,
+                physics::damping_system,
+                physics::rotational_integration_system,
+                physics::lense_thirring_system,
+                physics::narrow_phase_system,
+                physics::collision_impulse_system,
+                physics::compute_kinetic_energy_system,
+                physics::compute_potential_energy_system,
+                physics::energy_drift_monitor_system,
+                physics::sync_temperature_system,
+                physics::heat_conduction_system,
+                physics::radiative_cooling_system,
+                physics::sync_internal_energy_system,
+            ).chain().after(physics::sector_boundary_system));
         }
     }
-
-    // Stage 4.5: XSPH velocity smoothing (post-integration, SPH only)
-    schedule.add_systems(
-        physics::sph_xsph_system
-            .after(physics::velocity_verlet_velocity_system)
-    );
-
-    // Stage 4.6: MHD field evolution (§V.4, §VII.1)
-    //   Induction equation updates B from velocity field,
-    //   then divergence cleaning enforces ∇·B = 0.
-    schedule.add_systems(
-        physics::mhd_induction_system
-            .after(physics::sph_xsph_system)
-    );
-    schedule.add_systems(
-        physics::divergence_cleaning_system
-            .after(physics::mhd_induction_system)
-    );
-
-    // Stage 4.7: Relativistic updates
-    schedule.add_systems(
-        (
-            physics::compute_lorentz_factor_system,
-            physics::relativistic_momentum_system,
-            physics::compute_doppler_shift_system,
-        )
-            .after(physics::velocity_verlet_velocity_system)
-            .after(physics::semi_implicit_euler_system)
-            .after(physics::rk4_system)
-    );
-
-    // Stage 5: Sector boundary normalization
-    schedule.add_systems(
-        physics::sector_boundary_system
-            .after(physics::compute_acceleration_system)
-    );
-
-    // Stage 6: Momentum tracking
-    schedule.add_systems(
-        physics::update_momentum_system
-            .after(physics::compute_acceleration_system)
-    );
-
-    // Stage 7: Rotational dynamics
-    schedule.add_systems(
-        physics::compute_angular_acceleration_system
-            .after(physics::reset_torques)
-            .after(physics::update_momentum_system) 
-    );
-    schedule.add_systems(
-        physics::damping_system
-            .after(physics::compute_acceleration_system)
-    );
-    schedule.add_systems(
-        physics::rotational_integration_system
-            .after(physics::compute_angular_acceleration_system)
-            .after(physics::damping_system)
-            .after(physics::velocity_verlet_velocity_system)
-    );
-
-    // Stage 7.1: Lense-Thirring frame-dragging
-    schedule.add_systems(
-        physics::lense_thirring_system
-            .after(physics::rotational_integration_system)
-    );
-
-    // Stage 7.5: Narrowphase collisions & impulse resolution
-    // (Broadphase already ran in Stage 1.5)
-    schedule.add_systems(
-        physics::narrow_phase_system
-            .after(physics::rotational_integration_system)
-            .after(physics::sector_boundary_system)
-    );
-    schedule.add_systems(
-        physics::collision_impulse_system
-            .after(physics::narrow_phase_system)
-    );
-
-    // Stage 8: Energy monitoring
-    schedule.add_systems(
-        (
-            physics::compute_kinetic_energy_system,
-            physics::compute_potential_energy_system,
-        ).after(physics::update_momentum_system)
-    );
-    schedule.add_systems(
-        physics::energy_drift_monitor_system
-            .after(physics::compute_kinetic_energy_system)
-            .after(physics::compute_potential_energy_system)
-    );
-
-    // Stage 9: Thermodynamics (§VI)
-    //   sync T from U → conduction → radiation → sync U from T
-    schedule.add_systems(
-        physics::sync_temperature_system
-            .after(physics::collision_impulse_system)
-    );
-    schedule.add_systems(
-        physics::heat_conduction_system
-            .after(physics::sync_temperature_system)
-    );
-    schedule.add_systems(
-        physics::radiative_cooling_system
-            .after(physics::heat_conduction_system)
-    );
-    schedule.add_systems(
-        physics::sync_internal_energy_system
-            .after(physics::radiative_cooling_system)
-    );
 
     // --- Main Loop ---
     // For now, run a single tick to verify setup.
