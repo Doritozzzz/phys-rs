@@ -1,7 +1,7 @@
 //! # phys-rs — Universal Physics Engine
 //!
 //! Entry point. Sets up the ECS [`World`], inserts resources,
-//! and configures the physics [`Schedule`].
+//! configures the physics [`Schedule`], and launches the winit event loop.
 
 mod components;
 mod core;
@@ -40,26 +40,15 @@ fn main() {
     world.insert_resource(crate::gpu::GpuConfig::default());
 
     // --- GPU Init ---
-    // try_init_gpu runs before the main physics schedule to detect GPU availability.
     let mut init_schedule = Schedule::default();
     init_schedule.add_systems(crate::gpu::try_init_gpu);
     init_schedule.run(&mut world);
 
     // --- Schedule Setup ---
-    //
-    // IMPORTANT: bevy_ecs 0.18 forbids `.after(SystemTypeSet(fn))` when the
-    // same function appears more than once in the schedule (e.g., Velocity
-    // Verlet's second force evaluation duplicates the first-pass systems).
-    // We split into ≤21-element `.chain()` groups and use `.after()` only
-    // with systems that appear EXACTLY ONCE in each branch.
-    //
-    // The entire pipeline lives inside the match block so each integration
-    // method produces exactly one schedule topology.
     let mut schedule = Schedule::default();
 
     match integration_method {
         IntegrationMethod::SemiImplicitEuler => {
-            // Group 1: force evaluation (16 systems)
             schedule.add_systems((
                 physics::reset_forces,
                 physics::reset_torques,
@@ -78,7 +67,6 @@ fn main() {
                 physics::compute_acceleration_system,
             ).chain());
 
-            // Group 2: integration + post-integration (8 systems, after group 1)
             schedule.add_systems((
                 physics::semi_implicit_euler_system,
                 physics::sph_xsph_system,
@@ -90,7 +78,6 @@ fn main() {
                 physics::sector_boundary_system,
             ).chain().after(physics::compute_acceleration_system));
 
-            // Group 3: rest of pipeline (14 systems, sector_boundary unique in branch)
             schedule.add_systems((
                 physics::update_momentum_system,
                 physics::compute_angular_acceleration_system,
@@ -109,7 +96,6 @@ fn main() {
             ).chain().after(physics::sector_boundary_system));
         }
         IntegrationMethod::VelocityVerlet => {
-            // Pass 1 — force evaluation + Verlet position step (16 systems)
             schedule.add_systems((
                 physics::reset_forces,
                 physics::reset_torques,
@@ -129,8 +115,6 @@ fn main() {
                 physics::velocity_verlet_position_system,
             ).chain());
 
-            // Pass 2a — SECOND force evaluation + Verlet velocity step (17 systems)
-            // velocity_verlet_position_system appears only in Pass 1 → unambiguous
             schedule.add_systems((
                 physics::reset_forces,
                 physics::reset_torques,
@@ -150,7 +134,6 @@ fn main() {
                 physics::velocity_verlet_velocity_system,
             ).chain().after(physics::velocity_verlet_position_system));
 
-            // Pass 2b — post-integration + momentum + rotational + collisions (14 systems)
             schedule.add_systems((
                 physics::sph_xsph_system,
                 physics::mhd_induction_system,
@@ -168,8 +151,6 @@ fn main() {
                 physics::collision_impulse_system,
             ).chain().after(physics::velocity_verlet_velocity_system));
 
-            // Pass 2c — energy + thermodynamics (7 systems)
-            // collision_impulse_system appears only once in this branch → unambiguous
             schedule.add_systems((
                 physics::compute_kinetic_energy_system,
                 physics::compute_potential_energy_system,
@@ -181,7 +162,6 @@ fn main() {
             ).chain().after(physics::collision_impulse_system));
         }
         IntegrationMethod::RungeKutta4 => {
-            // Group 1: force evaluation (16 systems)
             schedule.add_systems((
                 physics::reset_forces,
                 physics::reset_torques,
@@ -200,7 +180,6 @@ fn main() {
                 physics::compute_acceleration_system,
             ).chain());
 
-            // Group 2: integration + post-integration (8 systems, after group 1)
             schedule.add_systems((
                 physics::rk4_system,
                 physics::sph_xsph_system,
@@ -212,7 +191,6 @@ fn main() {
                 physics::sector_boundary_system,
             ).chain().after(physics::compute_acceleration_system));
 
-            // Group 3: rest of pipeline (14 systems)
             schedule.add_systems((
                 physics::update_momentum_system,
                 physics::compute_angular_acceleration_system,
@@ -232,10 +210,11 @@ fn main() {
         }
     }
 
-    // --- Main Loop ---
-    // For now, run a single tick to verify setup.
-    // The full game loop with winit will be added in Sandbox Phase S1.
-    schedule.run(&mut world);
-
-    println!("phys-rs engine initialized. Schedule executed successfully.");
+    // --- Sandbox Event Loop ---
+    let mut app = render::App::new(world, schedule);
+    let event_loop = winit::event_loop::EventLoop::new()
+        .expect("Failed to create winit event loop");
+    event_loop
+        .run_app(&mut app)
+        .expect("Event loop terminated with error");
 }

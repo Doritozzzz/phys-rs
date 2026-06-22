@@ -220,14 +220,14 @@
 
 ## Phase S1: Window, Camera & Event Loop
 
-- [ ] **S1.1:** `src/render/mod.rs` — `winit` window creation and event loop initialization.
-- [ ] **S1.2:** wgpu surface configuration + swap chain setup.
-- [ ] **S1.3:** Free-fly camera system — WASD movement + mouse-look rotation.
-- [ ] **S1.4:** Orbital camera mode — click-drag to orbit around a focused entity.
-- [ ] **S1.5:** Camera zoom (scroll wheel) with logarithmic speed scaling for macro/micro views.
-- [ ] **S1.6:** Keyboard controls — pause/resume, simulation speed multiplier (1×, 10×, 100×, 1000×).
-- [ ] **S1.7:** Entity selection — click on body to focus camera + display info.
-- [ ] **S1.8:** Frame timing display — FPS, physics tick rate, total entity count.
+- [x] **S1.1:** `src/render/mod.rs` — `winit` window creation and event loop initialization.
+- [x] **S1.2:** wgpu surface configuration + swap chain setup.
+- [x] **S1.3:** Free-fly camera system — WASD movement + mouse-look rotation.
+- [x] **S1.4:** Orbital camera mode — click-drag to orbit around a focused entity.
+- [x] **S1.5:** Camera zoom (scroll wheel) with logarithmic speed scaling for macro/micro views.
+- [x] **S1.6:** Keyboard controls — pause/resume, simulation speed multiplier (1×, 10×, 100×, 1000×).
+- [x] **S1.7:** Entity selection — click on body to focus camera + display info.
+- [x] **S1.8:** Frame timing display — FPS, physics tick rate, total entity count.
 
 ---
 
