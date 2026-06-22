@@ -4,6 +4,7 @@
 //! Consumes the engine (World + Schedule) but never modifies physics code.
 
 pub mod camera;
+pub mod render_pipeline;
 pub mod surface;
 
 use std::sync::Arc;
@@ -339,7 +340,7 @@ impl ApplicationHandler for App {
 
                 // Present frame
                 if let Some(rs) = &self.render_state {
-                    rs.present_frame();
+                    rs.present_frame(&mut self.world);
                 }
             }
             _ => {}

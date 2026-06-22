@@ -233,9 +233,9 @@
 
 ## Phase S2: Rendering Pipeline
 
-- [ ] **S2.1:** Instanced draw calls — single draw for thousands of sphere primitives.
-- [ ] **S2.2:** Vertex + fragment shaders for Phong-lit sphere rendering.
-- [ ] **S2.3:** Per-body color from Temperature via Wien's law (realistic star color mapping).
+- [x] **S2.1:** Instanced draw calls — single draw for thousands of sphere primitives.
+- [x] **S2.2:** Vertex + fragment shaders for Phong-lit sphere rendering.
+- [x] **S2.3:** Per-body color from Temperature via Wien's law (realistic star color mapping).
 - [ ] **S2.4:** Size scaling based on Mass (logarithmic mapping for visual clarity).
 - [ ] **S2.5:** Orbit trail renderer — line-strip of last N positions per tracked entity.
 - [ ] **S2.6:** Velocity vector arrows (toggleable overlay).
