@@ -253,6 +253,7 @@ impl ApplicationHandler for App {
                         KeyCode::Space if pressed => {
                             if let Some(mut t) = self.world.get_resource_mut::<SimulationTime>() {
                                 t.paused = !t.paused;
+                                println!("→ Simulation {}", if t.paused { "paused" } else { "resumed" });
                             }
                         }
                         // Reset simulation time
@@ -269,12 +270,25 @@ impl ApplicationHandler for App {
                             match &*mode {
                                 CameraMode::FreeFly(ff) => {
                                     *mode = CameraMode::Orbital(OrbitalCamera {
-                                        target: ff.position.clone(),
+                                        target: ff.position,
                                         ..Default::default()
                                     });
+                                    println!("→ Camera mode: Orbital");
                                 }
-                                CameraMode::Orbital(_) => {
-                                    *mode = CameraMode::FreeFly(FreeFlyCamera::default());
+                                CameraMode::Orbital(o) => {
+                                    let eye = o.target
+                                        + DVec3::new(
+                                            o.distance * o.phi.cos() * o.theta.sin(),
+                                            o.distance * o.phi.sin(),
+                                            o.distance * o.phi.cos() * o.theta.cos(),
+                                        );
+                                    let look = (o.target - eye).normalize();
+                                    let mut ff = FreeFlyCamera::default();
+                                    ff.position = eye;
+                                    ff.yaw = look.z.atan2(look.x);
+                                    ff.pitch = look.y.asin();
+                                    *mode = CameraMode::FreeFly(ff);
+                                    println!("→ Camera mode: FreeFly");
                                 }
                             }
                         }
@@ -318,24 +332,6 @@ impl ApplicationHandler for App {
                         _ => {}
                     }
                 }
-                if pressed && button == winit::event::MouseButton::Right {
-                    self.world.resource_scope::<CameraMode, _>(|_world, mut mode| {
-                        if let CameraMode::Orbital(o) = &*mode {
-                            let eye = o.target
-                                + DVec3::new(
-                                    o.distance * o.phi.cos() * o.theta.sin(),
-                                    o.distance * o.phi.sin(),
-                                    o.distance * o.phi.cos() * o.theta.cos(),
-                                );
-                            let look = (o.target - eye).normalize();
-                            let mut ff = camera::FreeFlyCamera::default();
-                            ff.position = eye;
-                            ff.yaw = look.z.atan2(look.x);
-                            ff.pitch = look.y.asin();
-                            *mode = CameraMode::FreeFly(ff);
-                        }
-                    });
-                }
                 if pressed && button == winit::event::MouseButton::Left {
                     let pos = self.world.get_resource::<CameraInput>()
                         .map(|c| (c.cursor_x, c.cursor_y));
@@ -367,13 +363,6 @@ impl ApplicationHandler for App {
                 }
             }
             WindowEvent::RedrawRequested => {
-                // Reset frame-accumulated input
-                if let Some(mut input) = self.world.get_resource_mut::<CameraInput>() {
-                    input.mouse_delta_x = 0.0;
-                    input.mouse_delta_y = 0.0;
-                    input.scroll_delta = 0.0;
-                }
-
                 // Fixed-timestep accumulator
                 let now = Instant::now();
                 let frame_dt = self
@@ -409,6 +398,13 @@ impl ApplicationHandler for App {
                         println!("FPS: {:.1} | TPS: {:.1} | Entities: {}",
                             ft.display_fps, ft.display_tps, ec);
                     }
+                }
+
+                // Reset frame-accumulated input for next frame
+                if let Some(mut input) = self.world.get_resource_mut::<CameraInput>() {
+                    input.mouse_delta_x = 0.0;
+                    input.mouse_delta_y = 0.0;
+                    input.scroll_delta = 0.0;
                 }
 
                 // Present frame
