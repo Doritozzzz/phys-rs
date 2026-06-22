@@ -8,6 +8,7 @@ mod core;
 mod gpu;
 mod physics;
 mod render;
+mod scenarios;
 
 use bevy_ecs::prelude::*;
 
@@ -43,6 +44,9 @@ fn main() {
     let mut init_schedule = Schedule::default();
     init_schedule.add_systems(crate::gpu::try_init_gpu);
     init_schedule.run(&mut world);
+
+    // --- Spawn test entities ---
+    scenarios::spawn_test_demo(&mut world);
 
     // --- Schedule Setup ---
     let mut schedule = Schedule::default();

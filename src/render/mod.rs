@@ -129,12 +129,14 @@ impl App {
         world.init_resource::<CameraState>();
         {
             let mut cs = world.get_resource_mut::<CameraState>().unwrap();
-            let yaw = 0.0_f64;
-            let pitch = -0.3_f64;
+            let cam_pos = DVec3::new(0.0, 500.0, 2000.0);
+            let dir_to_origin = (DVec3::ZERO - cam_pos).normalize();
+            let yaw = dir_to_origin.z.atan2(dir_to_origin.x);
+            let pitch = dir_to_origin.y.asin();
             let forward = DVec3::new(yaw.cos() * pitch.cos(), pitch.sin(), yaw.sin() * pitch.cos()).normalize();
             let right = forward.cross(DVec3::Y).normalize();
             *cs = CameraState {
-                position: DVec3::new(0.0, 500.0, 2000.0),
+                position: cam_pos,
                 forward,
                 right,
                 up: right.cross(forward),

@@ -267,6 +267,7 @@
 > The system is designed to be extensible — adding a new scenario requires only defining initial
 > entity spawns and configuration, with zero engine modifications.*
 
+- [x] **S4.0:** 🧪 **Test Demo** — 1 star + 3 planets in circular orbits, simplest visual validation of the full engine+render pipeline (`src/scenarios/test_demo.rs`).
 - [ ] **S4.1:** 🌍 **Solar System** — Sun + 8 planets + major moons, real masses/distances/velocities from JPL ephemerides.
 - [ ] **S4.2:** ⭐ **Binary Star System** — two stars in mutual orbit with a circumbinary planet.
 - [ ] **S4.3:** ☄️ **Asteroid Belt** — thousands of particles in orbital band with Jupiter gravitational perturbations.
