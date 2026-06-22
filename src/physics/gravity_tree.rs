@@ -323,7 +323,7 @@ pub fn barnes_hut_gravity_system(
     }
 
     // ── Step 4: Compute forces ────────────────────────────────────
-    let forces: Vec<DVec3> = bodies.par_iter().map(|body| {
+    let forces: Vec<DVec3> = bodies.par_iter().with_min_len(1024).map(|body| {
         let f = root.compute_force(body, theta, g, eps2);
         debug_assert!(f.is_finite(), "NaN/Inf in Barnes-Hut force for body {}", body.index);
         f

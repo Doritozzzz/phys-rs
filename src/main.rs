@@ -37,6 +37,13 @@ fn main() {
     world.insert_resource(physics::ThermalConductionConfig::default());
     world.insert_resource(physics::MhdConfig::default());
     world.insert_resource(physics::NfwHaloConfig::default());
+    world.insert_resource(crate::gpu::GpuConfig::default());
+
+    // --- GPU Init ---
+    // try_init_gpu runs before the main physics schedule to detect GPU availability.
+    let mut init_schedule = Schedule::default();
+    init_schedule.add_systems(crate::gpu::try_init_gpu);
+    init_schedule.run(&mut world);
 
     // --- Schedule Setup ---
     //

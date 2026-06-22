@@ -80,15 +80,10 @@ pub fn sph_density_system(
     ), With<FluidParticle>>,
     candidate_pairs: Res<CandidatePairs>,
     config: Res<UniverseConfig>,
-    gpu_context: Option<Res<crate::gpu::GpuContext>>,
+    sph_mode: Option<Res<crate::gpu::SphMode>>,
 ) {
-    if let Some(_gpu) = gpu_context {
-        // TODO: (Phase 12.7) Implement actual GPU synchronization.
-        // 1. Extract `query` data into `f32` vectors.
-        // 2. Upload to `gpu::buffers::create_storage_buffer`.
-        // 3. Dispatch `SphPipeline::density_pipeline`.
-        // 4. Read back densities and update ECS.
-        // For now, fallback to CPU implementation:
+    if let Some(mode) = sph_mode {
+        let crate::gpu::SphMode::Cpu = &*mode else { return };
     }
     // Self-contribution: W(0, h) for each particle
     for (_, _, _, mass, h, mut density) in &mut query {
@@ -154,7 +149,11 @@ impl Default for TaitEquationConfig {
 pub fn sph_eos_system(
     mut query: Query<(&SmoothedDensity, &mut Pressure), With<FluidParticle>>,
     tait: Res<TaitEquationConfig>,
+    sph_mode: Option<Res<crate::gpu::SphMode>>,
 ) {
+    if let Some(mode) = sph_mode {
+        let crate::gpu::SphMode::Cpu = &*mode else { return };
+    }
     let b = tait.reference_density * tait.speed_of_sound.powi(2) / tait.gamma;
     let rho_0 = tait.reference_density;
 
@@ -188,7 +187,11 @@ pub fn sph_pressure_force_system(
     ), With<FluidParticle>>,
     candidate_pairs: Res<CandidatePairs>,
     config: Res<UniverseConfig>,
+    sph_mode: Option<Res<crate::gpu::SphMode>>,
 ) {
+    if let Some(mode) = sph_mode {
+        let crate::gpu::SphMode::Cpu = &*mode else { return };
+    }
     for pair in &candidate_pairs.0 {
         let (e1, e2) = (pair.entity_a, pair.entity_b);
 
@@ -269,7 +272,11 @@ pub fn sph_viscosity_system(
     visc: Res<SphViscosityConfig>,
     tait: Res<TaitEquationConfig>,
     config: Res<UniverseConfig>,
+    sph_mode: Option<Res<crate::gpu::SphMode>>,
 ) {
+    if let Some(mode) = sph_mode {
+        let crate::gpu::SphMode::Cpu = &*mode else { return };
+    }
     let c = tait.speed_of_sound;
     let epsilon = 1e-2_f64; // prevent division by zero in μ
 
@@ -352,7 +359,11 @@ pub fn sph_xsph_system(
     candidate_pairs: Res<CandidatePairs>,
     xsph: Res<XsphConfig>,
     config: Res<UniverseConfig>,
+    sph_mode: Option<Res<crate::gpu::SphMode>>,
 ) {
+    if let Some(mode) = sph_mode {
+        let crate::gpu::SphMode::Cpu = &*mode else { return };
+    }
     // Collect velocity corrections first (can't mutate while reading neighbors)
     let mut corrections: Vec<(Entity, glam::DVec3)> = Vec::new();
 
@@ -432,7 +443,11 @@ impl Default for SphBoundaryConfig {
 pub fn sph_boundary_system(
     mut query: Query<(&LocalPosition, &mut Force), With<FluidParticle>>,
     boundary: Res<SphBoundaryConfig>,
+    sph_mode: Option<Res<crate::gpu::SphMode>>,
 ) {
+    if let Some(mode) = sph_mode {
+        let crate::gpu::SphMode::Cpu = &*mode else { return };
+    }
     let ext = boundary.half_extent;
     let ad = boundary.activation_distance;
     let k = boundary.stiffness;

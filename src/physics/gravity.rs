@@ -50,7 +50,7 @@ pub fn brute_force_gravity_system(
         return;
     }
 
-    let forces: Vec<DVec3> = bodies.par_iter().enumerate().map(|(i, target)| {
+    let forces: Vec<DVec3> = bodies.par_iter().with_min_len(1024).enumerate().map(|(i, target)| {
         let mut force_sum = DVec3::ZERO;
         for (j, source) in bodies.iter().enumerate() {
             if i == j { continue; }
