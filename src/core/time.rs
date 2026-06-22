@@ -3,6 +3,8 @@
 //! Provides a fixed-timestep resource and accumulator pattern
 //! for deterministic physics stepping (ARCHITECTURE.md §3).
 
+use crate::components::Velocity;
+use crate::core::coordinates::{LocalPosition, Sector};
 use bevy_ecs::prelude::*;
 
 /// Fixed-timestep simulation clock.
@@ -38,7 +40,7 @@ impl Default for SimulationTime {
             tick: 0,
             elapsed: 0.0_f64,
             accumulator: 0.0_f64,
-            paused: false,
+            paused: true,
             speed_multiplier: 1.0_f64,
         }
     }
@@ -72,4 +74,10 @@ impl SimulationTime {
         self.tick += 1;
         self.elapsed += self.dt;
     }
+}
+
+/// Snapshot of initial entity states for R-key reset.
+#[derive(Resource, Clone)]
+pub struct InitialSnapshot {
+    pub entities: Vec<(Entity, Sector, LocalPosition, Velocity)>,
 }

@@ -7,4 +7,4 @@ pub mod time;
 
 pub use config::{IntegrationMethod, UniverseConfig};
 pub use coordinates::{LocalPosition, Sector};
-pub use time::SimulationTime;
+pub use time::{InitialSnapshot, SimulationTime};

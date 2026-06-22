@@ -1,6 +1,5 @@
 //! wgpu render surface, device, queue, pipeline, and frame presentation.
 
-use std::f64::consts::FRAC_PI_4;
 use bevy_ecs::prelude::*;
 use glam::{DMat4, DVec3};
 use winit::dpi::PhysicalSize;
@@ -11,14 +10,24 @@ use super::render_pipeline::{
     InstanceData, LineVertex, SpherePipeline, LinePipeline, SkyboxPipeline,
 };
 use super::camera::CameraState;
-use super::{RenderScaleMode, ShowVelocityVectors, ShowForceVectors, ShowSectorGrid};
+use super::{RenderScaleMode, ShowVelocityVectors, ShowForceVectors, ShowSectorGrid, ShowTrails};
 use crate::components::{
     BodyType, BoundingRadius, Mass, Temperature,
-    OrbitTrail, Velocity, Force,
+    OrbitMode, OrbitTrail, Velocity, Force,
     SmoothedDensity, Pressure,
 };
 use crate::core::coordinates::{LocalPosition, Sector};
 use crate::core::config::UniverseConfig;
+use crate::physics::kepler_orbit_points;
+
+/// Projection FOV in radians (same as DMat4::perspective_rh below).
+const FOV_RAD: f64 = std::f64::consts::FRAC_PI_4 * 0.5;
+
+/// Convert target screen-space pixels to world-space length at cam_distance.
+fn screen_space_length(cam_distance: f64, screen_height: f64, target_pixels: f64) -> f64 {
+    let pixel_world = 2.0 * (FOV_RAD * 0.5).tan() * cam_distance / screen_height;
+    target_pixels * pixel_world
+}
 
 /// Owns the wgpu device, queue, surface, configuration, and render pipeline.
 ///
@@ -155,7 +164,7 @@ impl RenderContext {
             match (cam, config) {
                 (Some(cam), Some(config)) => {
                     let aspect = self.config.width as f64 / self.config.height as f64;
-                    let proj = DMat4::perspective_rh(FRAC_PI_4 * 0.5, aspect, 0.1, 1.0e15);
+                    let proj = DMat4::perspective_rh(FOV_RAD, aspect, 0.1, 1.0e15);
                     let vw = DMat4::look_at_rh(cam.position, cam.position + cam.forward, cam.up);
                     let vp = proj * vw;
                     let ivp = vp.inverse();
@@ -200,10 +209,16 @@ impl RenderContext {
             .copied()
             .unwrap_or(ShowSectorGrid(false));
 
+        let show_trails = world.get_resource::<ShowTrails>()
+            .copied()
+            .unwrap_or(ShowTrails(true));
+
         // Trail lines collected from OrbitTrail components below
 
         let _selected = world.get_resource::<super::SelectedEntity>()
             .map(|s| s.0);
+
+        let screen_height = self.config.height as f64;
 
         // ── Collect instance data from ECS ─────────────────────────
         let mut instances: Vec<InstanceData> = Vec::new();
@@ -270,35 +285,123 @@ impl RenderContext {
             // collect from OrbitTrail component directly.
         }
 
-        // ── Collect OrbitTrail component lines ─────────────────────
-        // Walk entities with OrbitTrail and convert to line segments
-        let mut trail_query = world.query::<(&Sector, &LocalPosition, &OrbitTrail)>();
-        for (_sector, _local, trail) in trail_query.iter(world) {
-            let entries: Vec<_> = trail.history.iter().collect();
-            let max_i = entries.len().max(1) as f32;
-            for i in 1..entries.len() {
-                let (sec_a, loc_a) = entries[i - 1];
-                let (sec_b, loc_b) = entries[i];
-                let pa = DVec3::new(
-                    sec_a.0.x as f64 * ss,
-                    sec_a.0.y as f64 * ss,
-                    sec_a.0.z as f64 * ss,
-                ) + loc_a.0 - cam_pos;
-                let pb = DVec3::new(
-                    sec_b.0.x as f64 * ss,
-                    sec_b.0.y as f64 * ss,
-                    sec_b.0.z as f64 * ss,
-                ) + loc_b.0 - cam_pos;
-                let alpha = (1.0 - i as f32 / max_i) * 0.7;
-                line_vertices.push(LineVertex {
-                    position: [pa.x as f32, pa.y as f32, pa.z as f32],
-                    color: [0.4, 0.7, 1.0, alpha],
-                });
-                line_vertices.push(LineVertex {
-                    position: [pb.x as f32, pb.y as f32, pb.z as f32],
-                    color: [0.4, 0.7, 1.0, alpha],
-                });
+        // ── OrbitTrail lines: predicted orbit or history trail ─────
+        if show_trails.0 {
+        // Collect massive bodies for central body finding
+        let mut mass_query = world.query::<(Entity, &Sector, &LocalPosition, &Mass)>();
+        let masses: Vec<(Entity, DVec3, f64)> = mass_query.iter(world)
+            .map(|(e, s, l, m)| {
+                let pos = DVec3::new(
+                    s.0.x as f64 * ss,
+                    s.0.y as f64 * ss,
+                    s.0.z as f64 * ss,
+                ) + l.0;
+                (e, pos, m.0)
+            })
+            .collect();
+
+        let mut trail_query = world.query::<(
+            Entity, &Sector, &LocalPosition, &OrbitTrail, Option<&Velocity>,
+        )>();
+        for (entity, sector, local, trail, vel) in trail_query.iter(world) {
+            let world_pos = DVec3::new(
+                sector.0.x as f64 * ss,
+                sector.0.y as f64 * ss,
+                sector.0.z as f64 * ss,
+            ) + local.0;
+
+            match trail.mode {
+                OrbitMode::Predicted => {
+                    // Try Kepler-predicted orbit from current state.
+                    // If unavailable (hyperbolic/unbound/drifted), fallback to trail.
+                    let mut drew_predicted = false;
+                    if let Some(vel) = vel {
+                        let most_massive = masses.iter()
+                            .filter(|(e, _, _)| *e != entity)
+                            .max_by(|(_, _, m1), (_, _, m2)| {
+                                m1.partial_cmp(m2).unwrap_or(std::cmp::Ordering::Equal)
+                            });
+                        if let Some((_e, central_pos, central_mass)) = most_massive {
+                            let r_rel = world_pos - *central_pos;
+                            let pts = kepler_orbit_points(
+                                r_rel, vel.0, *central_mass, trail.orbit_point_count,
+                            );
+                            if !pts.is_empty() {
+                                drew_predicted = true;
+                                let color = [0.0, 0.8, 1.0, 0.9];
+                                for i in 0..pts.len() {
+                                    let p0 = pts[i] + *central_pos - cam_pos;
+                                    let p1 = pts[(i + 1) % pts.len()] + *central_pos - cam_pos;
+                                    line_vertices.push(LineVertex {
+                                        position: [p0.x as f32, p0.y as f32, p0.z as f32],
+                                        color,
+                                    });
+                                    line_vertices.push(LineVertex {
+                                        position: [p1.x as f32, p1.y as f32, p1.z as f32],
+                                        color,
+                                    });
+                                }
+                            }
+                        }
+                    }
+                    if !drew_predicted {
+                        // Fallback: draw history trail (same as Trail mode)
+                        let entries: Vec<_> = trail.history.iter().collect();
+                        let max_i = entries.len().max(1) as f32;
+                        for i in 1..entries.len() {
+                            let (sec_a, loc_a) = entries[i - 1];
+                            let (sec_b, loc_b) = entries[i];
+                            let pa = DVec3::new(
+                                sec_a.0.x as f64 * ss,
+                                sec_a.0.y as f64 * ss,
+                                sec_a.0.z as f64 * ss,
+                            ) + loc_a.0 - cam_pos;
+                            let pb = DVec3::new(
+                                sec_b.0.x as f64 * ss,
+                                sec_b.0.y as f64 * ss,
+                                sec_b.0.z as f64 * ss,
+                            ) + loc_b.0 - cam_pos;
+                            let alpha = 0.3 + (1.0 - i as f32 / max_i) * 0.7;
+                            line_vertices.push(LineVertex {
+                                position: [pa.x as f32, pa.y as f32, pa.z as f32],
+                                color: [0.4, 0.7, 1.0, alpha],
+                            });
+                            line_vertices.push(LineVertex {
+                                position: [pb.x as f32, pb.y as f32, pb.z as f32],
+                                color: [0.4, 0.7, 1.0, alpha],
+                            });
+                        }
+                    }
+                }
+                OrbitMode::Trail => {
+                    let entries: Vec<_> = trail.history.iter().collect();
+                    let max_i = entries.len().max(1) as f32;
+                    for i in 1..entries.len() {
+                        let (sec_a, loc_a) = entries[i - 1];
+                        let (sec_b, loc_b) = entries[i];
+                        let pa = DVec3::new(
+                            sec_a.0.x as f64 * ss,
+                            sec_a.0.y as f64 * ss,
+                            sec_a.0.z as f64 * ss,
+                        ) + loc_a.0 - cam_pos;
+                        let pb = DVec3::new(
+                            sec_b.0.x as f64 * ss,
+                            sec_b.0.y as f64 * ss,
+                            sec_b.0.z as f64 * ss,
+                        ) + loc_b.0 - cam_pos;
+                        let alpha = 0.3 + (1.0 - i as f32 / max_i) * 0.7;
+                        line_vertices.push(LineVertex {
+                            position: [pa.x as f32, pa.y as f32, pa.z as f32],
+                            color: [0.4, 0.7, 1.0, alpha],
+                        });
+                        line_vertices.push(LineVertex {
+                            position: [pb.x as f32, pb.y as f32, pb.z as f32],
+                            color: [0.4, 0.7, 1.0, alpha],
+                        });
+                    }
+                }
             }
+        }
         }
 
         // ── Velocity vectors (selected or all if toggled) ──────────
@@ -314,7 +417,8 @@ impl RenderContext {
                 let dir = velocity.0;
                 let mag = dir.length();
                 if mag > 1e-6 {
-                    let len = mag.max(10.0).min(1e9);
+                    let cam_dist = p.length().max(1.0);
+                    let len = screen_space_length(cam_dist, screen_height, 120.0);
                     let tip = p + dir / mag * len;
                     line_vertices.push(LineVertex {
                         position: [p.x as f32, p.y as f32, p.z as f32],
@@ -340,8 +444,9 @@ impl RenderContext {
                 let p = world_pos - cam_pos;
                 let dir = force.0;
                 let mag = dir.length();
-                if mag > 1e-6 {
-                    let len = (mag * 0.001).max(10.0).min(1e9);
+                if mag > 1e-8 {
+                    let cam_dist = p.length().max(1.0);
+                    let len = screen_space_length(cam_dist, screen_height, 120.0);
                     let tip = p + dir / mag * len;
                     line_vertices.push(LineVertex {
                         position: [p.x as f32, p.y as f32, p.z as f32],

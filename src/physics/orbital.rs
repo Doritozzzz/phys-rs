@@ -1,4 +1,82 @@
 use crate::core::constants::{C, G};
+use glam::DVec3;
+
+/// Computes points on a Keplerian orbit from state vector (r, v) and central mass.
+///
+/// Returns positions **relative to the central body** (focus), sampled evenly in
+/// eccentric anomaly. For bound orbits only (elliptical, e < 1). Returns empty
+/// `Vec` for hyperbolic/unbound orbits or invalid input.
+///
+/// # Parameters
+/// - `r`: Position of orbiting body relative to central body [m].
+/// - `v`: Velocity of orbiting body [m s⁻¹].
+/// - `m_central`: Mass of central body [kg].
+/// - `n`: Number of sample points (≥ 3).
+pub fn kepler_orbit_points(r: DVec3, v: DVec3, m_central: f64, n: usize) -> Vec<DVec3> {
+    use std::f64::consts::PI;
+
+    if m_central <= 0.0 || n < 3 {
+        return Vec::new();
+    }
+
+    let mu = G * m_central;
+    let r_mag = r.length();
+    let v2 = v.length_squared();
+
+    if r_mag < 1e-30 || v2 < 1e-60 {
+        return Vec::new();
+    }
+
+    // Specific angular momentum
+    let h = r.cross(v);
+    let h_mag = h.length();
+
+    if h_mag < 1e-30 {
+        return Vec::new(); // Radial trajectory, can't determine orbit plane
+    }
+
+    // Eccentricity vector: e = (v × h) / μ - r̂
+    let e_vec = (v.cross(h)) / mu - r / r_mag;
+    let e = e_vec.length();
+
+    // Specific orbital energy: ε = v²/2 - μ/r
+    let energy = v2 * 0.5 - mu / r_mag;
+
+    // Semi-major axis from vis-viva: 1/a = 2/r - v²/μ → a = -μ / (2ε)
+    let a = if energy.abs() < 1e-30 {
+        r_mag // Nearly parabolic, approximate
+    } else {
+        -mu / (2.0 * energy)
+    };
+
+    if a <= 0.0 || e >= 1.0 {
+        return Vec::new(); // Hyperbolic or unbound
+    }
+
+    // Orbital plane basis (perifocal frame)
+    let h_hat = h.normalize();
+    let p_hat = if e > 1e-12 {
+        e_vec.normalize() // Points to periapsis
+    } else {
+        (r / r_mag).normalize() // Circular: use radial direction
+    };
+    let q_hat = h_hat.cross(p_hat).normalize();
+
+    let b = a * (1.0 - e * e).sqrt(); // Semi-minor axis
+
+    let mut points = Vec::with_capacity(n);
+    for i in 0..n {
+        let ecc_anomaly = 2.0 * PI * i as f64 / n as f64;
+        let (cos_e, sin_e) = ecc_anomaly.sin_cos();
+        // Parametric ellipse relative to focus:
+        // x = a(cos E - e), y = b sin E
+        let x = a * (cos_e - e);
+        let y = b * sin_e;
+        points.push(p_hat * x + q_hat * y);
+    }
+
+    points
+}
 
 /// Calculates velocity magnitude from Vis-Viva equation (PHYSICS_MASTER_INDEX §IV.2).
 /// 

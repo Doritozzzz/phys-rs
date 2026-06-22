@@ -20,10 +20,10 @@ pub struct FreeFlyCamera {
 impl Default for FreeFlyCamera {
     fn default() -> Self {
         Self {
-            position: DVec3::new(0.0, 500.0, 2000.0),
+            position: DVec3::new(0.0, 80.0, 300.0),
             yaw: 0.0,
             pitch: -0.3,
-            speed: 500.0,
+            speed: 100.0,
             sensitivity: 0.005,
         }
     }
@@ -38,6 +38,7 @@ pub struct OrbitalCamera {
     pub theta: f64,
     pub phi: f64,
     pub sensitivity: f64,
+    pub pan_sensitivity: f64,
     pub min_distance: f64,
     pub max_distance: f64,
 }
@@ -46,10 +47,11 @@ impl Default for OrbitalCamera {
     fn default() -> Self {
         Self {
             target: DVec3::ZERO,
-            distance: 2000.0,
+            distance: 300.0,
             theta: 0.0,
-            phi: 0.5,
+            phi: 1.4,
             sensitivity: 0.008,
+            pan_sensitivity: 0.002,
             min_distance: 0.1,
             max_distance: 1.0e12,
         }
@@ -186,6 +188,23 @@ pub(crate) fn update_orbital(cam: &mut OrbitalCamera, input: &CameraInput, state
         cam.distance = (cam.distance * factor).clamp(cam.min_distance, cam.max_distance);
     }
 
+    let eye = cam.target + DVec3::new(
+        cam.distance * cam.phi.cos() * cam.theta.sin(),
+        cam.distance * cam.phi.sin(),
+        cam.distance * cam.phi.cos() * cam.theta.cos(),
+    );
+
+    // Pan (right mouse) — use current view vectors before target changes
+    if input.right_mouse {
+        let forward = (cam.target - eye).normalize();
+        let right = forward.cross(DVec3::Y).normalize();
+        let up = right.cross(forward);
+        let speed = cam.distance * cam.pan_sensitivity;
+        cam.target -= right * input.mouse_delta_x * speed;
+        cam.target += up * input.mouse_delta_y * speed;
+    }
+
+    // Recompute eye with final target
     let eye = cam.target + DVec3::new(
         cam.distance * cam.phi.cos() * cam.theta.sin(),
         cam.distance * cam.phi.sin(),

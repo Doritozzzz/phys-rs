@@ -14,8 +14,10 @@ use camera::{CameraInput, CameraMode, CameraState, FreeFlyCamera, OrbitalCamera}
 use glam::DVec3;
 use surface::RenderContext;
 use crate::components::spatial::{BoundingRadius, OrbitTrail};
+use crate::components::Velocity;
 use crate::core::coordinates::{LocalPosition, Sector};
 use crate::core::config::UniverseConfig;
+use crate::core::time::InitialSnapshot;
 use crate::core::SimulationTime;
 use winit::{
     application::ApplicationHandler,
@@ -106,6 +108,15 @@ impl Default for ShowForceVectors {
 #[derive(Resource, Clone, Copy)]
 pub struct ShowSectorGrid(pub bool);
 
+// ── Orbit trail toggle ────────────────────────────────────────────────
+
+#[derive(Resource, Clone, Copy)]
+pub struct ShowTrails(pub bool);
+
+impl Default for ShowTrails {
+    fn default() -> Self { Self(true) }
+}
+
 impl Default for ShowSectorGrid {
     fn default() -> Self { Self(false) }
 }
@@ -129,7 +140,7 @@ impl App {
         world.init_resource::<CameraState>();
         {
             let mut cs = world.get_resource_mut::<CameraState>().unwrap();
-            let cam_pos = DVec3::new(0.0, 500.0, 2000.0);
+            let cam_pos = DVec3::new(0.0, 80.0, 300.0);
             let dir_to_origin = (DVec3::ZERO - cam_pos).normalize();
             let yaw = dir_to_origin.z.atan2(dir_to_origin.x);
             let pitch = dir_to_origin.y.asin();
@@ -150,6 +161,7 @@ impl App {
         world.init_resource::<ShowVelocityVectors>();
         world.init_resource::<ShowForceVectors>();
         world.init_resource::<ShowSectorGrid>();
+        world.init_resource::<ShowTrails>();
 
         let mut render_schedule = Schedule::default();
         render_schedule.add_systems(camera::camera_system);
@@ -256,12 +268,32 @@ impl ApplicationHandler for App {
                                 println!("→ Simulation {}", if t.paused { "paused" } else { "resumed" });
                             }
                         }
-                        // Reset simulation time
+                        // Reset simulation & restore initial positions/velocities
                         KeyCode::KeyR if pressed => {
                             if let Some(mut t) = self.world.get_resource_mut::<SimulationTime>() {
                                 t.tick = 0;
                                 t.elapsed = 0.0;
                                 t.accumulator = 0.0;
+                            }
+                            let snapshot = self.world.get_resource::<InitialSnapshot>()
+                                .cloned();
+                            if let Some(snapshot) = snapshot {
+                                for (entity, sector, local, velocity) in &snapshot.entities {
+                                    if let Ok(mut entity_mut) = self.world.get_entity_mut(*entity) {
+                                        if let Some(mut s) = entity_mut.get_mut::<Sector>() {
+                                            *s = *sector;
+                                        }
+                                        if let Some(mut l) = entity_mut.get_mut::<LocalPosition>() {
+                                            *l = *local;
+                                        }
+                                        if let Some(mut v) = entity_mut.get_mut::<Velocity>() {
+                                            *v = *velocity;
+                                        }
+                                        if let Some(mut trail) = entity_mut.get_mut::<OrbitTrail>() {
+                                            trail.history.clear();
+                                        }
+                                    }
+                                }
                             }
                         }
                         // Toggle orbital / free-fly camera
@@ -318,6 +350,12 @@ impl ApplicationHandler for App {
                             let mut show = self.world.get_resource_mut::<ShowSectorGrid>().unwrap();
                             show.0 = !show.0;
                             println!("→ Sector grid: {}", show.0);
+                        }
+                        // ── Toggle orbit trails ─────────────────────────
+                        KeyCode::KeyT if pressed => {
+                            let mut show = self.world.get_resource_mut::<ShowTrails>().unwrap();
+                            show.0 = !show.0;
+                            println!("→ Orbit trails: {}", show.0);
                         }
                         _ => {}
                     }
@@ -416,9 +454,18 @@ impl ApplicationHandler for App {
         }
     }
 
-    fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
+    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
         if let Some(window) = &self.window {
-            window.request_redraw();
+            if let Some(last) = self.last_frame_time {
+                let next = last + std::time::Duration::from_secs_f64(1.0 / 60.0);
+                let now = Instant::now();
+                if now >= next {
+                    window.request_redraw();
+                }
+                event_loop.set_control_flow(ControlFlow::WaitUntil(next));
+            } else {
+                window.request_redraw();
+            }
         }
     }
 }

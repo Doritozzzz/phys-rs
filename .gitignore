@@ -36,3 +36,5 @@ Thumbs.db
 # Archivos temporales de edición
 *.rs.bk
 *~
+
+.opencode/

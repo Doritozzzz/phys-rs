@@ -47,7 +47,9 @@ pub use integrators::{
 pub use lorentz::lorentz_force_system;
 pub use mhd::{divergence_cleaning_system, mhd_induction_system, MhdConfig};
 pub use nfw::{nfw_gravity_system, NfwHaloConfig};
-pub use orbital::{escape_velocity, roche_limit, schwarzschild_radius, vis_viva_velocity};
+pub use orbital::{
+    escape_velocity, kepler_orbit_points, roche_limit, schwarzschild_radius, vis_viva_velocity,
+};
 pub use origin::sector_boundary_system;
 pub use relativity::{
     compute_doppler_shift_system, compute_lorentz_factor_system,
