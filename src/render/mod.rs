@@ -10,10 +10,10 @@ pub mod surface;
 use std::sync::Arc;
 use std::time::Instant;
 use bevy_ecs::prelude::*;
-use camera::{CameraInput, CameraMode, CameraState, FreeFlyCamera};
+use camera::{CameraInput, CameraMode, CameraState, FreeFlyCamera, OrbitalCamera};
 use glam::DVec3;
 use surface::RenderContext;
-use crate::components::spatial::BoundingRadius;
+use crate::components::spatial::{BoundingRadius, OrbitTrail};
 use crate::core::coordinates::{LocalPosition, Sector};
 use crate::core::config::UniverseConfig;
 use crate::core::SimulationTime;
@@ -26,7 +26,7 @@ use winit::{
     window::{Window, WindowAttributes, WindowId},
 };
 
-// ── Selection resources ───────────────────────────────────────────────────
+// ── Rendering resources ─────────────────────────────────────────────────
 
 /// Window pixel dimensions. Updated on resize.
 #[derive(Resource)]
@@ -55,7 +55,7 @@ impl Default for SelectedEntity {
     fn default() -> Self { Self(None) }
 }
 
-// ── Frame timing ──────────────────────────────────────────────────────────
+// ── Frame timing ─────────────────────────────────────────────────────────
 
 #[derive(Resource)]
 pub struct FrameTiming {
@@ -69,6 +69,45 @@ impl Default for FrameTiming {
     fn default() -> Self {
         Self { frame_count: 0, fps_accum: 0.0, display_fps: 0.0, display_tps: 0.0 }
     }
+}
+
+// ── S2.4: Visual scale mode ─────────────────────────────────────────────
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Resource)]
+pub enum RenderScaleMode {
+    /// Physical linear scale (real BoundingRadius).
+    Linear,
+    /// Logarithmic scale based on mass for visual clarity.
+    Logarithmic,
+}
+
+impl Default for RenderScaleMode {
+    fn default() -> Self { Self::Linear }
+}
+
+// ── S2.6 / S2.7: Debug vector toggles ───────────────────────────────────
+
+#[derive(Resource, Clone, Copy)]
+pub struct ShowVelocityVectors(pub bool);
+
+impl Default for ShowVelocityVectors {
+    fn default() -> Self { Self(false) }
+}
+
+#[derive(Resource, Clone, Copy)]
+pub struct ShowForceVectors(pub bool);
+
+impl Default for ShowForceVectors {
+    fn default() -> Self { Self(false) }
+}
+
+// ── S2.8: Sector grid toggle ────────────────────────────────────────────
+
+#[derive(Resource, Clone, Copy)]
+pub struct ShowSectorGrid(pub bool);
+
+impl Default for ShowSectorGrid {
+    fn default() -> Self { Self(false) }
 }
 
 // ── App ───────────────────────────────────────────────────────────────────
@@ -105,10 +144,15 @@ impl App {
         world.init_resource::<SelectedEntity>();
         world.init_resource::<RaycastClick>();
         world.init_resource::<FrameTiming>();
+        world.init_resource::<RenderScaleMode>();
+        world.init_resource::<ShowVelocityVectors>();
+        world.init_resource::<ShowForceVectors>();
+        world.init_resource::<ShowSectorGrid>();
 
         let mut render_schedule = Schedule::default();
         render_schedule.add_systems(camera::camera_system);
         render_schedule.add_systems(selection_system);
+        render_schedule.add_systems(orbit_trail_system);
 
         Self {
             world,
@@ -222,7 +266,7 @@ impl ApplicationHandler for App {
                             let mut mode = self.world.get_resource_mut::<CameraMode>().unwrap();
                             match &*mode {
                                 CameraMode::FreeFly(ff) => {
-                                    *mode = CameraMode::Orbital(camera::OrbitalCamera {
+                                    *mode = CameraMode::Orbital(OrbitalCamera {
                                         target: ff.position.clone(),
                                         ..Default::default()
                                     });
@@ -231,6 +275,33 @@ impl ApplicationHandler for App {
                                     *mode = CameraMode::FreeFly(FreeFlyCamera::default());
                                 }
                             }
+                        }
+                        // ── S2.4: Toggle linear / logarithmic scale ─────
+                        KeyCode::KeyL if pressed => {
+                            let mut mode = self.world.get_resource_mut::<RenderScaleMode>().unwrap();
+                            *mode = match *mode {
+                                RenderScaleMode::Linear => RenderScaleMode::Logarithmic,
+                                RenderScaleMode::Logarithmic => RenderScaleMode::Linear,
+                            };
+                            println!("→ Render scale: {:?}", *mode);
+                        }
+                        // ── S2.6: Toggle velocity vectors ──────────────
+                        KeyCode::KeyV if pressed => {
+                            let mut show = self.world.get_resource_mut::<ShowVelocityVectors>().unwrap();
+                            show.0 = !show.0;
+                            println!("→ Velocity vectors: {}", show.0);
+                        }
+                        // ── S2.7: Toggle force vectors ──────────────────
+                        KeyCode::KeyF if pressed => {
+                            let mut show = self.world.get_resource_mut::<ShowForceVectors>().unwrap();
+                            show.0 = !show.0;
+                            println!("→ Force vectors: {}", show.0);
+                        }
+                        // ── S2.8: Toggle sector grid ────────────────────
+                        KeyCode::KeyG if pressed => {
+                            let mut show = self.world.get_resource_mut::<ShowSectorGrid>().unwrap();
+                            show.0 = !show.0;
+                            println!("→ Sector grid: {}", show.0);
                         }
                         _ => {}
                     }
@@ -321,7 +392,7 @@ impl ApplicationHandler for App {
                     }
                 }
 
-                // Update camera + selection
+                // Update camera + selection + trails
                 self.render_schedule.run(&mut self.world);
 
                 // Frame timing
@@ -412,7 +483,7 @@ fn selection_system(
 
         match &mut *camera_mode {
             CameraMode::FreeFly(_) => {
-                *camera_mode = CameraMode::Orbital(camera::OrbitalCamera {
+                *camera_mode = CameraMode::Orbital(OrbitalCamera {
                     target: world_pos,
                     ..Default::default()
                 });
@@ -423,5 +494,23 @@ fn selection_system(
         }
     } else {
         selected.0 = None;
+    }
+}
+
+// ── S2.5: Orbit trail collection system ─────────────────────────────────
+
+/// Updates OrbitTrail components: pushes current position every N physics ticks.
+fn orbit_trail_system(
+    mut trails: Query<(&mut OrbitTrail, &Sector, &LocalPosition)>,
+    time: Res<SimulationTime>,
+) {
+    // Update trail every 4 physics ticks
+    if time.tick % 4 != 0 { return; }
+
+    for (mut trail, sector, local) in &mut trails {
+        trail.history.push_front((*sector, *local));
+        while trail.history.len() > trail.max_points {
+            trail.history.pop_back();
+        }
     }
 }

@@ -22,6 +22,6 @@ pub use electromagnetic::{ChargedBody, DivCleaningPsi, ElectricField, MagneticFi
 pub use identifiers::{BodyType, EntityName};
 pub use material::{Charge, Density, Luminosity, Opacity, Temperature};
 pub use rotational::{AngularVelocity, InertiaTensor, Orientation, Torque};
-pub use spatial::BoundingRadius;
+pub use spatial::{BoundingRadius, OrbitTrail};
 pub use sph::{FluidParticle, Pressure, SmoothedDensity, SmoothingRadius};
 pub use thermal::{HeatCapacity, InternalEnergy, ThermalConductivity};
