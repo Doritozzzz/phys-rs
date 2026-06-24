@@ -261,27 +261,50 @@
 
 ---
 
-## Phase S4: Creative Scenarios & Presets
+## Phase S4: High-Fidelity Visual Engine Re-architecture
+
+> *The current visual engine uses a hardcoded pipeline and basic Phong shading. This phase elevates the Sandbox to professional realism, making visual fidelity match physical fidelity.*
+
+- [ ] **S4.1:** **Render Graph Architecture** — Decouple render passes (Depth, Opaque, Transparent, Post-Process) for a modular, data-driven frame graph.
+- [ ] **S4.2:** **GPU-Driven Culling** — Implement Frustum and Occlusion culling in compute shaders before submission.
+- [ ] **S4.3:** **Dynamic Level of Detail (LOD)** — Distance-based tessellation or mesh swapping. Impostors (2D billboards) for distant stars/asteroids.
+- [ ] **S4.4:** **Forward+ / Clustered Deferred Pipeline** — Support for hundreds of dynamic light sources (binary stars, glowing gas) instead of a single global light.
+- [ ] **S4.5:** **Physically Based Rendering (PBR)** — Material pipeline supporting Albedo, Normal, Roughness, Metallic, and Ambient Occlusion for realistic planetary surfaces.
+- [ ] **S4.6:** **Real Emissive Materials** — Stars act as true light emitters (Point Lights) with 1/r² inverse-square physical falloff.
+- [ ] **S4.7:** **Dynamic Shadows** — Cascaded Shadow Maps (CSM) or Raytraced shadows. Moons project shadows on planets; eclipses become visually accurate.
+- [ ] **S4.8:** **Atmospheric Scattering** — Rayleigh and Mie scattering for planetary atmospheres (sky colors, sunset gradients based on density).
+- [ ] **S4.9:** **Volumetric SPH Rendering** — Raymarching density fields for SPH fluid particles to render realistic contiguous gas clouds and nebulae.
+- [ ] **S4.10:** **Volumetric Clouds & Rings** — Raymarched 3D noise clouds and self-shadowing ring systems (like Saturn's).
+- [ ] **S4.11:** **Procedural Terrain Generation** — Compute-shader noise (Simplex/Perlin) to dynamically displace planet meshes and generate craters/mountains on the fly.
+- [ ] **S4.12:** **Auto-Exposure (Eye Adaptation)** — Dynamic HDR exposure adjustment based on scene luminance histograms.
+- [ ] **S4.13:** **Lens Flares & Diffraction Spikes** — Physical starburst effects based on star luminosity and temperature.
+- [ ] **S4.14:** **Physical Motion Blur** — Velocity buffer-based screen-space motion blur driven by exact ECS `Velocity`.
+- [ ] **S4.15:** **Screen Space Reflections (SSR)** — For reflective liquids and ice surfaces.
+- [ ] **S4.16:** **Accretion Disk Raytracing** — Advanced relativistic volumetric rendering around black holes.
+
+---
+
+## Phase S5: Creative Scenarios & Presets
 
 > *Each scenario is a self-contained initial state that demonstrates a specific physics phenomenon.
 > The system is designed to be extensible — adding a new scenario requires only defining initial
 > entity spawns and configuration, with zero engine modifications.*
 
-- [x] **S4.0:** 🧪 **Test Demo** — 1 star + 3 planets in circular orbits, simplest visual validation of the full engine+render pipeline (`src/scenarios/test_demo.rs`).
-- [ ] **S4.1:** 🌍 **Solar System** — Sun + 8 planets + major moons, real masses/distances/velocities from JPL ephemerides.
-- [ ] **S4.2:** ⭐ **Binary Star System** — two stars in mutual orbit with a circumbinary planet.
-- [ ] **S4.3:** ☄️ **Asteroid Belt** — thousands of particles in orbital band with Jupiter gravitational perturbations.
-- [ ] **S4.4:** 🌀 **Galaxy Formation** — NFW dark matter halo + 100K star particles with spiral arm dynamics.
-- [ ] **S4.5:** 🔥 **Star Formation Nebula** — SPH gas cloud collapsing under self-gravity → protostar ignition.
-- [ ] **S4.6:** 💧 **Fluid Playground** — dam break, droplet collision, vortex rings (SPH showcase).
-- [ ] **S4.7:** 💥 **Collision Lab** — configurable body collisions: elastic, inelastic, explosive fragmentation.
-- [ ] **S4.8:** 🕳️ **Black Hole Accretion** — particles spiraling into Schwarzschild geometry with gravitational lensing.
-- [ ] **S4.9:** ⚡ **Electromagnetic Sandbox** — charged particles in magnetic fields, plasma confinement, Larmor orbits.
-- [ ] **S4.10:** 🌙 **Tidal Disruption** — moon crossing Roche limit → tidal breakup into ring system.
-- [ ] **S4.11:** 💫 **Supernova** — stellar core collapse, shockwave propagation through SPH gas envelope.
-- [ ] **S4.12:** 🎲 **Three-Body Chaos** — interactive 3-body problem with real-time Lyapunov exponent divergence display.
+- [x] **S5.0:** 🧪 **Test Demo** — 1 star + 3 planets in circular orbits, simplest visual validation of the full engine+render pipeline (`src/scenarios/test_demo.rs`).
+- [ ] **S5.1:** 🌍 **Solar System** — Sun + 8 planets + major moons, real masses/distances/velocities from JPL ephemerides.
+- [ ] **S5.2:** ⭐ **Binary Star System** — two stars in mutual orbit with a circumbinary planet.
+- [ ] **S5.3:** ☄️ **Asteroid Belt** — thousands of particles in orbital band with Jupiter gravitational perturbations.
+- [ ] **S5.4:** 🌀 **Galaxy Formation** — NFW dark matter halo + 100K star particles with spiral arm dynamics.
+- [ ] **S5.5:** 🔥 **Star Formation Nebula** — SPH gas cloud collapsing under self-gravity → protostar ignition.
+- [ ] **S5.6:** 💧 **Fluid Playground** — dam break, droplet collision, vortex rings (SPH showcase).
+- [ ] **S5.7:** 💥 **Collision Lab** — configurable body collisions: elastic, inelastic, explosive fragmentation.
+- [ ] **S5.8:** 🕳️ **Black Hole Accretion** — particles spiraling into Schwarzschild geometry with gravitational lensing.
+- [ ] **S5.9:** ⚡ **Electromagnetic Sandbox** — charged particles in magnetic fields, plasma confinement, Larmor orbits.
+- [ ] **S5.10:** 🌙 **Tidal Disruption** — moon crossing Roche limit → tidal breakup into ring system.
+- [ ] **S5.11:** 💫 **Supernova** — stellar core collapse, shockwave propagation through SPH gas envelope.
+- [ ] **S5.12:** 🎲 **Three-Body Chaos** — interactive 3-body problem with real-time Lyapunov exponent divergence display.
 
 ---
 
-*End of Backlog. Total: 13 engine phases (~100 tasks) + 4 sandbox phases (~40 tasks).*
-*Extensible by design — new scenarios (S4.N+1) and physics modules (Phase N+1) can be appended without restructuring.*
+*End of Backlog. Total: 13 engine phases (~100 tasks) + 5 sandbox phases (~56 tasks).*
+*Extensible by design — new scenarios (S5.N+1) and physics modules (Phase N+1) can be appended without restructuring.*

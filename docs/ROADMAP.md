@@ -75,7 +75,11 @@
 - **Objective:** Inspect, modify, and experiment with the simulation at runtime.
 - **Deliverables:** Entity HUD. Energy graphs. Click-to-spawn. Console commands. Save/load. Performance profiler. Entity inspector.
 
-### Phase S4: Creative Scenarios & Presets
+### Phase S4: High-Fidelity Visual Engine Re-architecture
+- **Objective:** Bring the visual realism up to the physical realism level with a modular, PBR-based rendering pipeline.
+- **Deliverables:** Render Graph architecture, Forward+/Deferred pipeline, Physically Based Rendering (PBR) materials, Emissive materials for stars, Dynamic Shadows (CSM/Raytraced), Atmospheric Scattering (Rayleigh/Mie), Volumetric Clouds & Nebulae (SPH Raymarching), Auto-Exposure, Lens Flares, Physical Motion Blur, and GPU-driven procedural terrain.
+
+### Phase S5: Creative Scenarios & Presets
 - **Objective:** Showcase every physics capability with stunning, interactive demonstrations.
 - **Deliverables:** Solar System, Binary Star, Asteroid Belt, Galaxy Formation, Star Formation Nebula, Fluid Playground, Collision Lab, Black Hole Accretion, EM Sandbox, Tidal Disruption, Supernova, Three-Body Chaos.
 - **Extensibility:** Adding new scenarios requires only initial-state definitions — zero engine changes.
