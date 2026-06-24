@@ -67,7 +67,7 @@ pub fn kepler_orbit_points(r: DVec3, v: DVec3, m_central: f64, n: usize) -> Vec<
     let mut points = Vec::with_capacity(n);
     for i in 0..n {
         let ecc_anomaly = 2.0 * PI * i as f64 / n as f64;
-        let (cos_e, sin_e) = ecc_anomaly.sin_cos();
+        let (sin_e, cos_e) = ecc_anomaly.sin_cos();
         // Parametric ellipse relative to focus:
         // x = a(cos E - e), y = b sin E
         let x = a * (cos_e - e);

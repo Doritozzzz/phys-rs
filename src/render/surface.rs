@@ -5,15 +5,16 @@ use glam::{DMat4, DVec3};
 use winit::dpi::PhysicalSize;
 use winit::window::Window;
 
+use super::bloom::{BloomPipeline, BloomSettings, BloomTextures};
 use super::render_pipeline::{
     create_viewproj_bind_group_layout,
     InstanceData, LineVertex, SpherePipeline, LinePipeline, SkyboxPipeline,
 };
 use super::camera::CameraState;
-use super::{RenderScaleMode, ShowVelocityVectors, ShowForceVectors, ShowSectorGrid, ShowTrails};
+use super::{RenderScaleMode, ShowVelocityVectors, ShowForceVectors, ShowSectorGrid, ShowTrails, RenderDirectToSwapchain};
 use crate::components::{
     BodyType, BoundingRadius, Mass, Temperature,
-    OrbitMode, OrbitTrail, Velocity, Force,
+    OrbitTrail, Velocity, Force,
     SmoothedDensity, Pressure,
 };
 use crate::core::coordinates::{LocalPosition, Sector};
@@ -29,7 +30,30 @@ fn screen_space_length(cam_distance: f64, screen_height: f64, target_pixels: f64
     target_pixels * pixel_world
 }
 
+/// Choose best HDR format: prefers Rgba16Float if it supports RENDER_ATTACHMENT
+/// + TEXTURE_BINDING + filterable float sampling. Falls back to Rgba32Float.
+fn choose_hdr_format(adapter: &wgpu::Adapter) -> wgpu::TextureFormat {
+    let needed_usages =
+        wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING;
+    let candidates = [wgpu::TextureFormat::Rgba16Float, wgpu::TextureFormat::Rgba32Float];
+    for &fmt in &candidates {
+        let f = adapter.get_texture_format_features(fmt);
+        let usages_ok = f.allowed_usages.contains(needed_usages);
+        let filterable_ok = f.flags.contains(wgpu::TextureFormatFeatureFlags::FILTERABLE);
+        if usages_ok && filterable_ok {
+            return fmt;
+        }
+    }
+    wgpu::TextureFormat::Rgba32Float
+}
+
 /// Owns the wgpu device, queue, surface, configuration, and render pipeline.
+
+
+
+
+
+
 ///
 /// # Safety
 /// The `Surface` inside this struct is transmuted to `'static` because it
@@ -44,6 +68,9 @@ pub struct RenderContext {
     pub line_pipeline: LinePipeline,
     pub skybox_pipeline: SkyboxPipeline,
     pub viewproj_layout: wgpu::BindGroupLayout,
+    pub bloom_textures: BloomTextures,
+    pub bloom_pipeline: BloomPipeline,
+    hdr_format: wgpu::TextureFormat,
 }
 
 impl RenderContext {
@@ -88,6 +115,10 @@ impl RenderContext {
             ))
             .expect("Failed to create wgpu device");
 
+        // ── Debug: catch wgpu validation errors ────────────────────
+        device.on_uncaptured_error(std::sync::Arc::new(|err: wgpu::Error| {
+            eprintln!("[wgpu] *** UNCAPTURED ERROR ***\n{err:#}");
+        }));
         let size = window.inner_size();
         let caps = surface.get_capabilities(&adapter);
         let format = caps
@@ -110,10 +141,22 @@ impl RenderContext {
 
         surface.configure(&device, &config);
 
+        // ── Determine HDR render target format ──────────────────────
+        let hdr_format = choose_hdr_format(&adapter);
+
         let viewproj_layout = create_viewproj_bind_group_layout(&device);
-        let sphere_pipeline = SpherePipeline::new(&device, &config, &queue, &viewproj_layout);
-        let line_pipeline = LinePipeline::new(&device, &config, &viewproj_layout);
-        let skybox_pipeline = SkyboxPipeline::new(&device, &config);
+        let sphere_pipeline = SpherePipeline::new(&device, &config, &queue, &viewproj_layout, hdr_format);
+        let line_pipeline = LinePipeline::new(&device, &config, &viewproj_layout, config.format);
+        let skybox_pipeline = SkyboxPipeline::new(&device, &config, hdr_format);
+
+        let bloom_textures = BloomTextures::new(&device, hdr_format, config.width, config.height);
+        let mut bloom_pipeline = BloomPipeline::new(&device, hdr_format, config.format);
+        bloom_pipeline.rebind(
+            &device,
+            &bloom_textures.hdr_view,
+            &bloom_textures.bloom_view,
+            &bloom_textures.ping_view,
+        );
 
         Self {
             surface,
@@ -124,6 +167,9 @@ impl RenderContext {
             line_pipeline,
             skybox_pipeline,
             viewproj_layout,
+            bloom_textures,
+            bloom_pipeline,
+            hdr_format,
         }
     }
 
@@ -136,6 +182,13 @@ impl RenderContext {
         self.config.height = size.height;
         self.surface.configure(&self.device, &self.config);
         self.sphere_pipeline.resize_depth(&self.device, size.width, size.height);
+        self.bloom_textures.recreate(&self.device, self.hdr_format, size.width, size.height);
+        self.bloom_pipeline.rebind(
+            &self.device,
+            &self.bloom_textures.hdr_view,
+            &self.bloom_textures.bloom_view,
+            &self.bloom_textures.ping_view,
+        );
     }
 
     /// Acquire frame texture, build instance data from ECS, render, and present.
@@ -152,9 +205,10 @@ impl RenderContext {
             }
         };
 
-        let view = frame
+        let frame_view = frame
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
+        let hdr_view = &self.bloom_textures.hdr_view;
 
         // ── Build view-projection matrix from CameraState ──────────
         let cam_pos;
@@ -165,8 +219,10 @@ impl RenderContext {
                 (Some(cam), Some(config)) => {
                     let aspect = self.config.width as f64 / self.config.height as f64;
                     let proj = DMat4::perspective_rh(FOV_RAD, aspect, 0.1, 1.0e15);
-                    let vw = DMat4::look_at_rh(cam.position, cam.position + cam.forward, cam.up);
-                    let vp = proj * vw;
+                    // The shader receives positions already relative to the camera (world_pos - cam_pos).
+                    // So the view matrix should only apply the camera rotation, not another translation.
+                    let view = DMat4::look_at_rh(cam.position, cam.position + cam.forward, cam.up);
+                    let vp = proj * view;
                     let ivp = vp.inverse();
                     (vp, ivp, config.sector_size)
                 }
@@ -217,6 +273,11 @@ impl RenderContext {
 
         let _selected = world.get_resource::<super::SelectedEntity>()
             .map(|s| s.0);
+
+        let direct_to_swapchain = world.get_resource::<RenderDirectToSwapchain>()
+            .copied()
+            .unwrap_or(RenderDirectToSwapchain(false))
+            .0;
 
         let screen_height = self.config.height as f64;
 
@@ -285,7 +346,7 @@ impl RenderContext {
             // collect from OrbitTrail component directly.
         }
 
-        // ── OrbitTrail lines: predicted orbit or history trail ─────
+        // ── OrbitTrail lines: predicted Kepler orbit ─────────────────
         if show_trails.0 {
         // Collect massive bodies for central body finding
         let mut mass_query = world.query::<(Entity, &Sector, &LocalPosition, &Mass)>();
@@ -310,94 +371,32 @@ impl RenderContext {
                 sector.0.z as f64 * ss,
             ) + local.0;
 
-            match trail.mode {
-                OrbitMode::Predicted => {
-                    // Try Kepler-predicted orbit from current state.
-                    // If unavailable (hyperbolic/unbound/drifted), fallback to trail.
-                    let mut drew_predicted = false;
-                    if let Some(vel) = vel {
-                        let most_massive = masses.iter()
-                            .filter(|(e, _, _)| *e != entity)
-                            .max_by(|(_, _, m1), (_, _, m2)| {
-                                m1.partial_cmp(m2).unwrap_or(std::cmp::Ordering::Equal)
-                            });
-                        if let Some((_e, central_pos, central_mass)) = most_massive {
-                            let r_rel = world_pos - *central_pos;
-                            let pts = kepler_orbit_points(
-                                r_rel, vel.0, *central_mass, trail.orbit_point_count,
-                            );
-                            if !pts.is_empty() {
-                                drew_predicted = true;
-                                let color = [0.0, 0.8, 1.0, 0.9];
-                                for i in 0..pts.len() {
-                                    let p0 = pts[i] + *central_pos - cam_pos;
-                                    let p1 = pts[(i + 1) % pts.len()] + *central_pos - cam_pos;
-                                    line_vertices.push(LineVertex {
-                                        position: [p0.x as f32, p0.y as f32, p0.z as f32],
-                                        color,
-                                    });
-                                    line_vertices.push(LineVertex {
-                                        position: [p1.x as f32, p1.y as f32, p1.z as f32],
-                                        color,
-                                    });
-                                }
-                            }
-                        }
-                    }
-                    if !drew_predicted {
-                        // Fallback: draw history trail (same as Trail mode)
-                        let entries: Vec<_> = trail.history.iter().collect();
-                        let max_i = entries.len().max(1) as f32;
-                        for i in 1..entries.len() {
-                            let (sec_a, loc_a) = entries[i - 1];
-                            let (sec_b, loc_b) = entries[i];
-                            let pa = DVec3::new(
-                                sec_a.0.x as f64 * ss,
-                                sec_a.0.y as f64 * ss,
-                                sec_a.0.z as f64 * ss,
-                            ) + loc_a.0 - cam_pos;
-                            let pb = DVec3::new(
-                                sec_b.0.x as f64 * ss,
-                                sec_b.0.y as f64 * ss,
-                                sec_b.0.z as f64 * ss,
-                            ) + loc_b.0 - cam_pos;
-                            let alpha = 0.3 + (1.0 - i as f32 / max_i) * 0.7;
+            // Kepler-predicted orbit from current state vector
+            if let Some(vel) = vel {
+                let most_massive = masses.iter()
+                    .filter(|(e, _, _)| *e != entity)
+                    .max_by(|(_, _, m1), (_, _, m2)| {
+                        m1.partial_cmp(m2).unwrap_or(std::cmp::Ordering::Equal)
+                    });
+                if let Some((_e, central_pos, central_mass)) = most_massive {
+                    let r_rel = world_pos - *central_pos;
+                    let pts = kepler_orbit_points(
+                        r_rel, vel.0, *central_mass, trail.orbit_point_count,
+                    );
+                    if !pts.is_empty() {
+                        let color = [0.0, 0.8, 1.0, 0.9];
+                        for i in 0..pts.len() {
+                            let p0 = pts[i] + *central_pos - cam_pos;
+                            let p1 = pts[(i + 1) % pts.len()] + *central_pos - cam_pos;
                             line_vertices.push(LineVertex {
-                                position: [pa.x as f32, pa.y as f32, pa.z as f32],
-                                color: [0.4, 0.7, 1.0, alpha],
+                                position: [p0.x as f32, p0.y as f32, p0.z as f32],
+                                color,
                             });
                             line_vertices.push(LineVertex {
-                                position: [pb.x as f32, pb.y as f32, pb.z as f32],
-                                color: [0.4, 0.7, 1.0, alpha],
+                                position: [p1.x as f32, p1.y as f32, p1.z as f32],
+                                color,
                             });
                         }
-                    }
-                }
-                OrbitMode::Trail => {
-                    let entries: Vec<_> = trail.history.iter().collect();
-                    let max_i = entries.len().max(1) as f32;
-                    for i in 1..entries.len() {
-                        let (sec_a, loc_a) = entries[i - 1];
-                        let (sec_b, loc_b) = entries[i];
-                        let pa = DVec3::new(
-                            sec_a.0.x as f64 * ss,
-                            sec_a.0.y as f64 * ss,
-                            sec_a.0.z as f64 * ss,
-                        ) + loc_a.0 - cam_pos;
-                        let pb = DVec3::new(
-                            sec_b.0.x as f64 * ss,
-                            sec_b.0.y as f64 * ss,
-                            sec_b.0.z as f64 * ss,
-                        ) + loc_b.0 - cam_pos;
-                        let alpha = 0.3 + (1.0 - i as f32 / max_i) * 0.7;
-                        line_vertices.push(LineVertex {
-                            position: [pa.x as f32, pa.y as f32, pa.z as f32],
-                            color: [0.4, 0.7, 1.0, alpha],
-                        });
-                        line_vertices.push(LineVertex {
-                            position: [pb.x as f32, pb.y as f32, pb.z as f32],
-                            color: [0.4, 0.7, 1.0, alpha],
-                        });
                     }
                 }
             }
@@ -513,6 +512,8 @@ impl RenderContext {
             }
         }
 
+        // ── DIAGNOSTIC: trace line generation (temporary) ────────
+
         // ── Upload uniforms ───────────────────────────────────────
         self.sphere_pipeline.update_uniform(&self.queue, &view_proj_f32);
         self.line_pipeline.update_uniform(&self.queue, &view_proj_f32);
@@ -529,12 +530,12 @@ impl RenderContext {
                 label: Some("render_encoder"),
             });
 
-        // Pass 1: Skybox (depth off) + Spheres (depth on) + Lines (depth on, write off)
+        // Pass 1: Skybox (depth off) + Spheres (depth on) — HDR target
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("main_render_pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
+                    view: hdr_view,
                     resolve_target: None,
                     depth_slice: None,
                     ops: wgpu::Operations {
@@ -577,19 +578,65 @@ impl RenderContext {
                 0,
                 0..(instances.len() as u32).min(10_000),
             );
-
-            // 1c. Lines
-            if !line_vertices.is_empty() {
-                self.line_pipeline.render(&mut pass, line_vertices.len() as u32);
-            }
         }
 
+        // ── Bloom post-processing ──────────────────────────────────
+        if direct_to_swapchain {
+            self.bloom_pipeline.render_passthrough(&mut encoder, &frame_view);
+        } else {
+            let (bloom_threshold, bloom_intensity) = world
+                .get_resource::<BloomSettings>()
+                .map(|s| if s.enabled { (s.threshold, s.intensity) } else { (100.0, 0.0) })
+                .unwrap_or((1.0, 0.0));
+            self.bloom_pipeline.update_uniforms(&self.queue, bloom_threshold, bloom_intensity);
+            self.bloom_pipeline.execute(
+                &mut encoder,
+                &self.bloom_textures.bloom_view,
+                &self.bloom_textures.ping_view,
+                &frame_view,
+            );
+        }
+
+        // ── Pass 2: Lines overlay — drawn AFTER tonemapping directly
+        //    onto swapchain so they bypass HDR/bloom and stay visible.
+        //    Uses the sphere depth buffer (loaded, not cleared) for
+        //    proper occlusion behind solid geometry.
+        if !line_vertices.is_empty() {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("line_overlay_pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &frame_view,
+                    resolve_target: None,
+                    depth_slice: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &self.sphere_pipeline.depth_view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Discard,
+                    }),
+                    stencil_ops: None,
+                }),
+                multiview_mask: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+            self.line_pipeline.render(&mut pass, line_vertices.len() as u32);
+        }
+
+        // ── Submit and present ─────────────────────────────────────
         self.queue.submit(std::iter::once(encoder.finish()));
         frame.present();
     }
 }
 
 /// Approximate blackbody color from temperature (Wien's law approximation).
+///
+/// Returns HDR values (>1.0) for very hot stars so bloom can extract them.
 fn temperature_to_rgb(temp_kelvin: f64) -> [f32; 4] {
     let t = temp_kelvin / 100.0;
     let (r, g, b) = if t <= 66.0 {
@@ -603,7 +650,15 @@ fn temperature_to_rgb(temp_kelvin: f64) -> [f32; 4] {
         let b = 255.0;
         (r, g, b)
     };
-    [(r / 255.0) as f32, (g / 255.0) as f32, (b / 255.0) as f32, 1.0]
+    let mut color = [r / 255.0, g / 255.0, b / 255.0, 1.0];
+    // Boost hot stars (T > 8000K) into HDR range for bloom
+    if temp_kelvin > 8000.0 {
+        let boost = 1.0 + (temp_kelvin - 8000.0) / 4000.0; // 1× at 8kK, 6× at 28kK
+        color[0] *= boost;
+        color[1] *= boost;
+        color[2] *= boost;
+    }
+    [color[0] as f32, color[1] as f32, color[2] as f32, color[3] as f32]
 }
 
 /// SPH density-based color ramp (S2.9).

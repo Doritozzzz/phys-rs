@@ -3,6 +3,7 @@
 //! Owns the winit event loop, wgpu render surface, camera, and input handling.
 //! Consumes the engine (World + Schedule) but never modifies physics code.
 
+pub mod bloom;
 pub mod camera;
 pub mod render_pipeline;
 pub mod surface;
@@ -12,8 +13,9 @@ use std::time::Instant;
 use bevy_ecs::prelude::*;
 use camera::{CameraInput, CameraMode, CameraState, FreeFlyCamera, OrbitalCamera};
 use glam::DVec3;
+use bloom::BloomSettings;
 use surface::RenderContext;
-use crate::components::spatial::{BoundingRadius, OrbitTrail};
+use crate::components::spatial::BoundingRadius;
 use crate::components::Velocity;
 use crate::core::coordinates::{LocalPosition, Sector};
 use crate::core::config::UniverseConfig;
@@ -121,6 +123,15 @@ impl Default for ShowSectorGrid {
     fn default() -> Self { Self(false) }
 }
 
+// ── Debug: bypass HDR/bloom — render direct to swapchain ────────────────
+
+#[derive(Resource, Clone, Copy)]
+pub struct RenderDirectToSwapchain(pub bool);
+
+impl Default for RenderDirectToSwapchain {
+    fn default() -> Self { Self(false) }
+}
+
 // ── App ───────────────────────────────────────────────────────────────────
 
 /// Top-level sandbox application.
@@ -140,7 +151,7 @@ impl App {
         world.init_resource::<CameraState>();
         {
             let mut cs = world.get_resource_mut::<CameraState>().unwrap();
-            let cam_pos = DVec3::new(0.0, 80.0, 300.0);
+            let cam_pos = DVec3::new(0.0, 10.0, 30.0);
             let dir_to_origin = (DVec3::ZERO - cam_pos).normalize();
             let yaw = dir_to_origin.z.atan2(dir_to_origin.x);
             let pitch = dir_to_origin.y.asin();
@@ -162,11 +173,12 @@ impl App {
         world.init_resource::<ShowForceVectors>();
         world.init_resource::<ShowSectorGrid>();
         world.init_resource::<ShowTrails>();
+        world.init_resource::<BloomSettings>();
+        world.init_resource::<RenderDirectToSwapchain>();
 
         let mut render_schedule = Schedule::default();
         render_schedule.add_systems(camera::camera_system);
         render_schedule.add_systems(selection_system);
-        render_schedule.add_systems(orbit_trail_system);
 
         Self {
             world,
@@ -289,9 +301,6 @@ impl ApplicationHandler for App {
                                         if let Some(mut v) = entity_mut.get_mut::<Velocity>() {
                                             *v = *velocity;
                                         }
-                                        if let Some(mut trail) = entity_mut.get_mut::<OrbitTrail>() {
-                                            trail.history.clear();
-                                        }
                                     }
                                 }
                             }
@@ -356,6 +365,18 @@ impl ApplicationHandler for App {
                             let mut show = self.world.get_resource_mut::<ShowTrails>().unwrap();
                             show.0 = !show.0;
                             println!("→ Orbit trails: {}", show.0);
+                        }
+                        // ── S2.11: Toggle bloom ──────────────────────────
+                        KeyCode::KeyB if pressed => {
+                            let mut bloom = self.world.get_resource_mut::<BloomSettings>().unwrap();
+                            bloom.enabled = !bloom.enabled;
+                            println!("→ Bloom: {}", bloom.enabled);
+                        }
+                        // ── Debug: bypass HDR/bloom ───────────────────────
+                        KeyCode::KeyP if pressed => {
+                            let mut direct = self.world.get_resource_mut::<RenderDirectToSwapchain>().unwrap();
+                            direct.0 = !direct.0;
+                            println!("→ Direct to swapchain: {}", direct.0);
                         }
                         _ => {}
                     }
@@ -542,20 +563,3 @@ fn selection_system(
     }
 }
 
-// ── S2.5: Orbit trail collection system ─────────────────────────────────
-
-/// Updates OrbitTrail components: pushes current position every N physics ticks.
-fn orbit_trail_system(
-    mut trails: Query<(&mut OrbitTrail, &Sector, &LocalPosition)>,
-    time: Res<SimulationTime>,
-) {
-    // Update trail every 4 physics ticks
-    if time.tick % 4 != 0 { return; }
-
-    for (mut trail, sector, local) in &mut trails {
-        trail.history.push_front((*sector, *local));
-        while trail.history.len() > trail.max_points {
-            trail.history.pop_back();
-        }
-    }
-}

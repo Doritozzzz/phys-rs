@@ -237,13 +237,13 @@
 - [x] **S2.2:** Vertex + fragment shaders for Phong-lit sphere rendering.
 - [x] **S2.3:** Per-body color from Temperature via Wien's law (realistic star color mapping).
 - [x] **S2.4:** Size scaling based on Mass (logarithmic mapping for visual clarity). `L` key toggle.
-- [x] **S2.5:** Orbit trail renderer — `OrbitTrail` component + line-strip from ECS history. Updated every 4 ticks.
+- [x] **S2.5:** Orbit renderer — `OrbitTrail` component + Kepler-predicted full ellipse from state vector. Toggle `T` key. *(Simplified: removed history trail mode, sin/cos fix in orbital.rs, Sol no longer has OrbitTrail)*
 - [x] **S2.6:** Velocity vector arrows (green, toggle `V` key).
 - [x] **S2.7:** Force vector arrows (orange, toggle `F` key).
 - [x] **S2.8:** Grid / sector boundary wireframe overlay (toggle `G` key, 27 sectors around camera).
 - [x] **S2.9:** SPH fluid particle rendering — density-based color ramp (blue → cyan → red/white).
 - [x] **S2.10:** Procedural skybox / starfield background — full-screen triangle with per-fragment star noise.
-- [ ] **S2.11:** Bloom post-processing — requires multi-pass HDR render target infrastructure. Pipeline placeholder created.
+- [x] **S2.11:** Bloom post-processing — HDR forward pass (Rgba16Float/Rgba32Float), bright-extract, 9-tap separable gaussian blur, ACES filmic tonemap composite. Toggle `B` key. *(Decoupled sampler bindings to fix black-screen on RTX 4060)*
 - [ ] **S2.12:** Gravitational lensing — requires post-process pipeline + ray-marching shader. Pending multi-pass infra.
 
 ---

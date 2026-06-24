@@ -20,7 +20,7 @@ pub struct FreeFlyCamera {
 impl Default for FreeFlyCamera {
     fn default() -> Self {
         Self {
-            position: DVec3::new(0.0, 80.0, 300.0),
+            position: DVec3::new(0.0, 10.0, 30.0),
             yaw: 0.0,
             pitch: -0.3,
             speed: 100.0,

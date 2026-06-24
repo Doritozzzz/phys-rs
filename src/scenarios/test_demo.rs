@@ -20,7 +20,6 @@ pub fn spawn_test_demo(world: &mut World) {
         PreviousAcceleration(DVec3::ZERO),
         BodyType::Star,
         EntityName("Sol".into()),
-        OrbitTrail::default(),
     ));
 
     // Three planets in circular orbits (periods ~40-130s with M=1e22)

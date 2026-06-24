@@ -150,7 +150,7 @@ fn skybox_fs(input: SkyboxVertexOutput) -> @location(0) vec4<f32> {
                 let temp = hash33(cell + vec3<f32>(3.0, 7.0, 11.0)) * 3.0 + 0.5; // 0.5..3.5
                 // Star color varies from blue-white to red
                 let star_temp = vec3<f32>(1.0, 0.7 + temp * 0.1, 0.5 + temp * 0.15);
-                star_color += star_temp * brightness * (0.5 + f32(oct) * 0.3);
+                star_color += star_temp * brightness * (3.0 + f32(oct) * 1.5);
             }
         }
     }
