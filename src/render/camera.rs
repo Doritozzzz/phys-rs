@@ -136,7 +136,32 @@ pub fn camera_system(
     input: Res<CameraInput>,
     mut mode: ResMut<CameraMode>,
     mut state: ResMut<CameraState>,
+    mut selected: Option<ResMut<crate::render::SelectedEntity>>,
+    config: Option<Res<crate::core::config::UniverseConfig>>,
+    query: Query<(&crate::core::coordinates::Sector, &crate::core::coordinates::LocalPosition)>,
 ) {
+    if input.right_mouse && (input.mouse_delta_x != 0.0 || input.mouse_delta_y != 0.0) {
+        if let Some(sel) = &mut selected {
+            sel.0 = None;
+        }
+    } else if let CameraMode::Orbital(cam) = &mut *mode {
+        if let Some(sel) = &selected {
+            if let Some(entity) = sel.0 {
+                if let Ok((sector, local)) = query.get(entity) {
+                    if let Some(cfg) = &config {
+                        let ss = cfg.sector_size;
+                        let world_pos = glam::DVec3::new(
+                            sector.0.x as f64 * ss,
+                            sector.0.y as f64 * ss,
+                            sector.0.z as f64 * ss,
+                        ) + local.0;
+                        cam.target = world_pos;
+                    }
+                }
+            }
+        }
+    }
+
     match &mut *mode {
         CameraMode::FreeFly(cam) => update_free_fly(cam, &time, &input, &mut state),
         CameraMode::Orbital(cam) => update_orbital(cam, &input, &mut state),

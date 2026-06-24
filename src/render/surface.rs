@@ -269,7 +269,7 @@ impl RenderContext {
                     let proj = DMat4::perspective_rh(FOV_RAD, aspect, 0.1, 1.0e15);
                     // The shader receives positions already relative to the camera (world_pos - cam_pos).
                     // So the view matrix should only apply the camera rotation, not another translation.
-                    let view = DMat4::look_at_rh(cam.position, cam.position + cam.forward, cam.up);
+                    let view = DMat4::look_at_rh(DVec3::ZERO, cam.forward, cam.up);
                     let vp = proj * view;
                     let ivp = vp.inverse();
                     (vp, ivp, config.sector_size)
@@ -787,18 +787,31 @@ impl RenderContext {
                             ) + local.0;
 
                             let target_radius = world.get::<crate::components::spatial::BoundingRadius>(e).map(|r| r.0).unwrap_or(10.0);
+                            let scale_mode = world.get_resource::<crate::render::RenderScaleMode>().copied().unwrap_or(crate::render::RenderScaleMode::Linear);
+                            let visual_radius = match scale_mode {
+                                crate::render::RenderScaleMode::Linear => target_radius,
+                                crate::render::RenderScaleMode::Logarithmic => {
+                                    let mass = world.get::<crate::components::Mass>(e).map(|m| m.0).unwrap_or(target_radius * target_radius * target_radius * 1000.0);
+                                    let r_base = 5.0_f64;
+                                    let k = 15.0_f64;
+                                    let m_ref = 1e22_f64;
+                                    r_base + k * (1.0 + mass / m_ref).log10()
+                                }
+                            };
+                            let target_distance = visual_radius * 3.0;
+
                             if let Some(mut camera_mode) = world.get_resource_mut::<crate::render::CameraMode>() {
                                 match &mut *camera_mode {
                                     crate::render::CameraMode::FreeFly(_) => {
                                         *camera_mode = crate::render::CameraMode::Orbital(crate::render::OrbitalCamera {
                                             target: world_pos,
-                                            distance: target_radius * 3.0,
+                                            distance: target_distance,
                                             ..Default::default()
                                         });
                                     }
                                     crate::render::CameraMode::Orbital(o) => {
                                         o.target = world_pos;
-                                        o.distance = target_radius * 3.0;
+                                        o.distance = target_distance;
                                     }
                                 }
                             }
