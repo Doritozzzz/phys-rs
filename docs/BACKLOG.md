@@ -244,7 +244,7 @@
 - [x] **S2.9:** SPH fluid particle rendering — density-based color ramp (blue → cyan → red/white).
 - [x] **S2.10:** Procedural skybox / starfield background — full-screen triangle with per-fragment star noise.
 - [x] **S2.11:** Bloom post-processing — HDR forward pass (Rgba16Float/Rgba32Float), bright-extract, 9-tap separable gaussian blur, ACES filmic tonemap composite. Toggle `B` key. *(Decoupled sampler bindings to fix black-screen on RTX 4060)*
-- [ ] **S2.12:** Gravitational lensing — requires post-process pipeline + ray-marching shader. Pending multi-pass infra.
+- [x] **S2.12:** Gravitational lensing — screen-space distortion post-process. Empty `GravitationalLens` marker component, `LensingPipeline` + `LensingSettings` Resource, toggle `N` key.
 
 ---
 

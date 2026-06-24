@@ -46,7 +46,7 @@ fn main() {
     init_schedule.run(&mut world);
 
     // --- Spawn test entities ---
-    scenarios::spawn_test_demo(&mut world);
+    scenarios::spawn_lensing_demo(&mut world);
 
     // --- Schedule Setup ---
     let mut schedule = Schedule::default();

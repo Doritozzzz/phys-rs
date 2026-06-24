@@ -1,17 +1,19 @@
 //! wgpu render surface, device, queue, pipeline, and frame presentation.
 
 use bevy_ecs::prelude::*;
-use glam::{DMat4, DVec3};
+use glam::{DMat4, DVec2, DVec3, DVec4};
 use winit::dpi::PhysicalSize;
 use winit::window::Window;
 
 use super::bloom::{BloomPipeline, BloomSettings, BloomTextures};
+use super::lensing::{LensingPipeline, LensingSettings, LensingTextures, LensGpuData};
 use super::render_pipeline::{
     create_viewproj_bind_group_layout,
     InstanceData, LineVertex, SpherePipeline, LinePipeline, SkyboxPipeline,
 };
 use super::camera::CameraState;
 use super::{RenderScaleMode, ShowVelocityVectors, ShowForceVectors, ShowSectorGrid, ShowTrails, RenderDirectToSwapchain};
+use crate::components::lensing::GravitationalLens;
 use crate::components::{
     BodyType, BoundingRadius, Mass, Temperature,
     OrbitTrail, Velocity, Force,
@@ -70,6 +72,8 @@ pub struct RenderContext {
     pub viewproj_layout: wgpu::BindGroupLayout,
     pub bloom_textures: BloomTextures,
     pub bloom_pipeline: BloomPipeline,
+    pub lensing_textures: LensingTextures,
+    pub lensing_pipeline: LensingPipeline,
     hdr_format: wgpu::TextureFormat,
 }
 
@@ -150,10 +154,17 @@ impl RenderContext {
         let skybox_pipeline = SkyboxPipeline::new(&device, &config, hdr_format);
 
         let bloom_textures = BloomTextures::new(&device, hdr_format, config.width, config.height);
+        let lensing_textures = LensingTextures::new(&device, hdr_format, config.width, config.height);
+        let lensing_pipeline = LensingPipeline::new(
+            &device,
+            hdr_format,
+            &bloom_textures.hdr_view,
+        );
+        // Bloom reads from lensed texture (lensing passthrough when disabled).
         let mut bloom_pipeline = BloomPipeline::new(&device, hdr_format, config.format);
         bloom_pipeline.rebind(
             &device,
-            &bloom_textures.hdr_view,
+            &lensing_textures.lensed_view,
             &bloom_textures.bloom_view,
             &bloom_textures.ping_view,
         );
@@ -169,6 +180,8 @@ impl RenderContext {
             viewproj_layout,
             bloom_textures,
             bloom_pipeline,
+            lensing_textures,
+            lensing_pipeline,
             hdr_format,
         }
     }
@@ -183,9 +196,12 @@ impl RenderContext {
         self.surface.configure(&self.device, &self.config);
         self.sphere_pipeline.resize_depth(&self.device, size.width, size.height);
         self.bloom_textures.recreate(&self.device, self.hdr_format, size.width, size.height);
+        self.lensing_textures.recreate(&self.device, self.hdr_format, size.width, size.height);
+        self.lensing_pipeline.rebind(&self.device, &self.bloom_textures.hdr_view);
+        // Bloom reads from lensed texture (lensing passthrough when disabled).
         self.bloom_pipeline.rebind(
             &self.device,
-            &self.bloom_textures.hdr_view,
+            &self.lensing_textures.lensed_view,
             &self.bloom_textures.bloom_view,
             &self.bloom_textures.ping_view,
         );
@@ -579,6 +595,47 @@ impl RenderContext {
                 0..(instances.len() as u32).min(10_000),
             );
         }
+
+        // ── Gravitational lensing (S2.12) ──────────────────────────
+        let lens_settings = world
+            .get_resource::<LensingSettings>()
+            .copied()
+            .unwrap_or(LensingSettings::default());
+
+        let mut lens_data: Vec<LensGpuData> = Vec::new();
+        if lens_settings.enabled {
+            let mut lens_query = world.query::<(
+                &Sector,
+                &LocalPosition,
+                &Mass,
+                &GravitationalLens,
+            )>();
+            for (sector, local, mass, _lens) in lens_query.iter(world) {
+                let world_pos = DVec3::new(
+                    sector.0.x as f64 * ss,
+                    sector.0.y as f64 * ss,
+                    sector.0.z as f64 * ss,
+                ) + local.0;
+                let clip = view_proj * DVec4::new(world_pos.x, world_pos.y, world_pos.z, 1.0);
+                if clip.w <= 0.0 { continue; }
+                let ndc = DVec2::new(clip.x, clip.y) / clip.w;
+                let uv = DVec2::new(ndc.x * 0.5 + 0.5, -ndc.y * 0.5 + 0.5);
+                if uv.x >= -0.3 && uv.x <= 1.3 && uv.y >= -0.3 && uv.y <= 1.3 {
+                    lens_data.push(LensGpuData::new(
+                        [uv.x as f32, uv.y as f32],
+                        mass.0 as f32,
+                    ));
+                    if lens_data.len() >= 64 { break; }
+                }
+            }
+        }
+        self.lensing_pipeline.execute(
+            &mut encoder,
+            &self.queue,
+            &lens_settings,
+            &lens_data,
+            &self.lensing_textures.lensed_view,
+        );
 
         // ── Bloom post-processing ──────────────────────────────────
         if direct_to_swapchain {

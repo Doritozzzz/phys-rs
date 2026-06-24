@@ -5,6 +5,7 @@
 
 pub mod bloom;
 pub mod camera;
+pub mod lensing;
 pub mod render_pipeline;
 pub mod surface;
 
@@ -14,6 +15,7 @@ use bevy_ecs::prelude::*;
 use camera::{CameraInput, CameraMode, CameraState, FreeFlyCamera, OrbitalCamera};
 use glam::DVec3;
 use bloom::BloomSettings;
+use lensing::LensingSettings;
 use surface::RenderContext;
 use crate::components::spatial::BoundingRadius;
 use crate::components::Velocity;
@@ -174,6 +176,7 @@ impl App {
         world.init_resource::<ShowSectorGrid>();
         world.init_resource::<ShowTrails>();
         world.init_resource::<BloomSettings>();
+        world.init_resource::<LensingSettings>();
         world.init_resource::<RenderDirectToSwapchain>();
 
         let mut render_schedule = Schedule::default();
@@ -371,6 +374,12 @@ impl ApplicationHandler for App {
                             let mut bloom = self.world.get_resource_mut::<BloomSettings>().unwrap();
                             bloom.enabled = !bloom.enabled;
                             println!("→ Bloom: {}", bloom.enabled);
+                        }
+                        // ── S2.12: Toggle lensing ────────────────────────
+                        KeyCode::KeyN if pressed => {
+                            let mut lens = self.world.get_resource_mut::<LensingSettings>().unwrap();
+                            lens.enabled = !lens.enabled;
+                            println!("→ Lensing: {}", lens.enabled);
                         }
                         // ── Debug: bypass HDR/bloom ───────────────────────
                         KeyCode::KeyP if pressed => {

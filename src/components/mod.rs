@@ -7,6 +7,7 @@ pub mod collisions;
 pub mod dynamics;
 pub mod electromagnetic;
 pub mod identifiers;
+pub mod lensing;
 pub mod material;
 #[cfg(feature = "nuclear")]
 pub mod nuclear;
