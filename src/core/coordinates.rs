@@ -15,14 +15,14 @@ use glam::{DVec3, I64Vec3};
 ///
 /// Each component is a sector index along the corresponding axis.
 /// The physical origin of a sector is `sector_index * sector_size` [m].
-#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Hash, Default, serde::Serialize, serde::Deserialize)]
 pub struct Sector(pub I64Vec3);
 
 /// Fine-grained position offset within a sector [m].
 ///
 /// Represents displacement from the sector's origin in meters.
 /// After normalization, each component stays within `[-sector_size/2, +sector_size/2]`.
-#[derive(Component, Debug, Clone, Copy, PartialEq, Default)]
+#[derive(Component, Debug, Clone, Copy, PartialEq, Default, serde::Serialize, serde::Deserialize)]
 pub struct LocalPosition(pub DVec3);
 
 impl Sector {

@@ -5,14 +5,14 @@ use parry3d_f64::shape::SharedShape;
 /// Shared geometry shape for collision narrowphase.
 ///
 /// Wraps `parry3d_f64::shape::SharedShape` which can be a Sphere, Cuboid, Capsule, etc.
-#[derive(Component, Clone)]
+#[derive(Component, Clone, serde::Serialize, serde::Deserialize)]
 pub struct CollisionShape(pub SharedShape);
 
 /// Coefficient of Restitution for collision impulse.
 ///
 /// 0.0 = perfectly inelastic (bodies stick together, all kinetic energy lost to deformation/heat).
 /// 1.0 = perfectly elastic (no loss of kinetic energy).
-#[derive(Component, Debug, Clone, Copy, PartialEq)]
+#[derive(Component, Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct CoefficientOfRestitution(pub f64);
 
 impl Default for CoefficientOfRestitution {
@@ -24,7 +24,7 @@ impl Default for CoefficientOfRestitution {
 /// Friction coefficient for tangential impulses.
 ///
 /// Maps to standard kinetic friction `mu_k`.
-#[derive(Component, Debug, Clone, Copy, PartialEq)]
+#[derive(Component, Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct FrictionCoefficient(pub f64);
 
 impl Default for FrictionCoefficient {

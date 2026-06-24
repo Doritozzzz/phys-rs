@@ -7,13 +7,13 @@ use bevy_ecs::prelude::*;
 /// Represents the radius of the smallest sphere that fully contains
 /// the entity's collision geometry. Used by the K-D tree broadphase
 /// to generate candidate collision pairs.
-#[derive(Component, Debug, Clone, Copy, PartialEq, Default)]
+#[derive(Component, Debug, Clone, Copy, PartialEq, Default, serde::Serialize, serde::Deserialize)]
 pub struct BoundingRadius(pub f64);
 
 /// Orbital predicted orbit for rendering.
 ///
 /// Draws a complete predicted Keplerian orbit from the current state vector.
-#[derive(Component, Debug, Clone)]
+#[derive(Component, Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct OrbitTrail {
     /// Number of points to sample along predicted orbit.
     pub orbit_point_count: usize,

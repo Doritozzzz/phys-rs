@@ -251,12 +251,12 @@
 ## Phase S3: Debug UI & Developer Tools
 
 - [x] **S3.1:** On-screen HUD — selected entity properties (mass, velocity, position, temperature, type).
-- [ ] **S3.2:** Real-time energy monitor graph — kinetic, potential, and total energy curves.
-- [ ] **S3.3:** Entity spawner — click-to-place bodies with configurable mass, velocity, and type.
-- [ ] **S3.4:** Console/terminal overlay — runtime commands: change `G`, `ε`, `dt`, integrator, spawn presets.
-- [ ] **S3.5:** World state serialization — save/load full simulation state to binary or JSON.
-- [ ] **S3.6:** Time control UI — speed slider, step-by-step mode, reverse playback of saved states.
-- [ ] **S3.7:** Performance profiler overlay — per-system timing breakdown (gravity, integration, SPH, collisions).
+- [x] **S3.2:** Real-time energy monitor graph — kinetic, potential, and total energy curves.
+- [x] **S3.3:** Entity spawner — click-to-place bodies with configurable mass, velocity, and type.
+- [x] **S3.4:** Console/terminal overlay — runtime commands: change `G`, `ε`, `dt`, integrator, spawn presets.
+- [x] **S3.5:** World state serialization — save/load full simulation state to binary or JSON.
+- [x] **S3.6:** Time control UI — speed slider, step-by-step mode, reverse playback of saved states.
+- [x] **S3.7:** Performance profiler overlay — per-system timing breakdown (gravity, integration, SPH, collisions).
 - [x] **S3.8:** Entity inspector panel — scrollable list of all entities, filterable by `BodyType`.
 
 ---

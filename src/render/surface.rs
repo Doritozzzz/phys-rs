@@ -83,6 +83,7 @@ pub struct RenderContext {
     pub egui_ctx: egui::Context,
     pub egui_state: egui_winit::State,
     pub egui_renderer: egui_wgpu::Renderer,
+    pub ui_state: super::ui::UiState,
 }
 
 impl RenderContext {
@@ -211,6 +212,7 @@ impl RenderContext {
             egui_ctx,
             egui_state,
             egui_renderer,
+            ui_state: super::ui::UiState::default(),
         }
     }
 
@@ -755,8 +757,21 @@ impl RenderContext {
             });
         {
             let egui_input = self.egui_state.take_egui_input(&*self.window);
+            
+            // Read energy monitor for UI
+            let energy_monitor = world.get_resource::<crate::physics::energy::EnergyMonitor>();
+            let diagnostics = world.get_resource::<crate::core::diagnostics::Diagnostics>();
+            
             let egui_output = self.egui_ctx.run_ui(egui_input, |ctx| {
-                ui_actions = super::ui::draw_ui(ctx, &entity_list, current_selected, hud_data.as_ref());
+                ui_actions = super::ui::draw_ui(
+                    ctx,
+                    &mut self.ui_state,
+                    &entity_list,
+                    current_selected,
+                    hud_data.as_ref(),
+                    energy_monitor,
+                    diagnostics,
+                );
             });
             let pp = egui_output.pixels_per_point;
             self.egui_state.handle_platform_output(&*self.window, egui_output.platform_output);
@@ -815,6 +830,141 @@ impl RenderContext {
                                     }
                                 }
                             }
+                        }
+                    }
+                    super::ui::actions::UiAction::TogglePause => {
+                        if let Some(mut t) = world.get_resource_mut::<crate::core::SimulationTime>() {
+                            t.paused = !t.paused;
+                            self.ui_state.console_history.push(format!("Simulation {}", if t.paused { "paused" } else { "resumed" }));
+                        }
+                    }
+                    super::ui::actions::UiAction::StepTick => {
+                        if let Some(mut t) = world.get_resource_mut::<crate::core::SimulationTime>() {
+                            t.paused = true;
+                            // Step exactly one tick. We can do this by setting accumulator.
+                            t.accumulator += t.dt;
+                        }
+                    }
+                    super::ui::actions::UiAction::SetTimeScale(scale) => {
+                        if let Some(mut t) = world.get_resource_mut::<crate::core::SimulationTime>() {
+                            t.speed_multiplier = scale;
+                        }
+                    }
+                    super::ui::actions::UiAction::QuickSave => {
+                        let mut saved_sim = crate::core::serialization::SavedSimulation { entities: Vec::new() };
+                        let mut query = world.query::<(
+                            Option<&crate::components::identifiers::EntityName>,
+                            Option<&crate::components::identifiers::BodyType>,
+                            Option<&crate::components::Mass>,
+                            Option<&crate::components::spatial::BoundingRadius>,
+                            Option<&crate::core::coordinates::LocalPosition>,
+                            Option<&crate::core::coordinates::Sector>,
+                            Option<&crate::components::Velocity>,
+                            Option<&crate::components::Temperature>,
+                        )>();
+                        for (name, body_type, mass, radius, pos, sector, vel, temp) in query.iter(world) {
+                            saved_sim.entities.push(crate::core::serialization::SavedEntity {
+                                name: name.cloned(),
+                                body_type: body_type.cloned(),
+                                mass: mass.cloned(),
+                                radius: radius.cloned(),
+                                local_pos: pos.cloned(),
+                                sector: sector.cloned(),
+                                velocity: vel.cloned(),
+                                temperature: temp.cloned(),
+                            });
+                        }
+                        match std::fs::File::create("quicksave.bin") {
+                            Ok(file) => {
+                                if let Err(e) = bincode::serialize_into(file, &saved_sim) {
+                                    self.ui_state.console_history.push(format!("QuickSave failed: {}", e));
+                                } else {
+                                    self.ui_state.console_history.push("QuickSave successful".into());
+                                }
+                            }
+                            Err(e) => {
+                                self.ui_state.console_history.push(format!("Failed to create save file: {}", e));
+                            }
+                        }
+                    }
+                    super::ui::actions::UiAction::QuickLoad => {
+                        match std::fs::File::open("quicksave.bin") {
+                            Ok(file) => {
+                                match bincode::deserialize_from::<_, crate::core::serialization::SavedSimulation>(file) {
+                                    Ok(saved_sim) => {
+                                        // Despawn all current entities with LocalPosition
+                                        let mut entities_to_despawn = Vec::new();
+                                        let mut query = world.query_filtered::<Entity, bevy_ecs::query::With<crate::core::coordinates::LocalPosition>>();
+                                        for entity in query.iter(world) {
+                                            entities_to_despawn.push(entity);
+                                        }
+                                        for entity in entities_to_despawn {
+                                            world.despawn(entity);
+                                        }
+                                        // Spawn new entities
+                                        for saved_entity in saved_sim.entities {
+                                            let mut e = world.spawn_empty();
+                                            if let Some(c) = saved_entity.name { e.insert(c); }
+                                            if let Some(c) = saved_entity.body_type { e.insert(c); }
+                                            if let Some(c) = saved_entity.mass { e.insert(c); }
+                                            if let Some(c) = saved_entity.radius { e.insert(c); }
+                                            if let Some(c) = saved_entity.local_pos { e.insert(c); }
+                                            if let Some(c) = saved_entity.sector { e.insert(c); }
+                                            if let Some(c) = saved_entity.velocity { e.insert(c); }
+                                            if let Some(c) = saved_entity.temperature { e.insert(c); }
+                                            e.insert(crate::components::Acceleration(glam::DVec3::ZERO));
+                                            e.insert(crate::components::Force(glam::DVec3::ZERO));
+                                            let mass_val = saved_entity.mass.map(|m| m.0).unwrap_or(1.0);
+                                            let vel_val = saved_entity.velocity.map(|v| v.0).unwrap_or(glam::DVec3::ZERO);
+                                            e.insert(crate::components::LinearMomentum(vel_val * mass_val));
+                                        }
+                                        self.ui_state.console_history.push("QuickLoad successful".into());
+                                    }
+                                    Err(e) => {
+                                        self.ui_state.console_history.push(format!("QuickLoad failed: {}", e));
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                self.ui_state.console_history.push(format!("Failed to open save file: {}", e));
+                            }
+                        }
+                    }
+                    super::ui::actions::UiAction::SpawnEntity { mass, position, velocity, temperature, body_type } => {
+                        self.ui_state.console_history.push(format!("SpawnEntity: mass={mass:.1e}, type={body_type:?}"));
+                        let mut e = world.spawn_empty();
+                        e.insert(crate::components::identifiers::EntityName(format!("Spawned {:?}", body_type)));
+                        e.insert(body_type);
+                        e.insert(crate::components::Mass(mass));
+                        e.insert(crate::components::Velocity(velocity));
+                        e.insert(crate::components::Temperature(temperature));
+                        e.insert(crate::core::coordinates::Sector(glam::I64Vec3::ZERO));
+                        e.insert(crate::core::coordinates::LocalPosition(position));
+                        let default_density = match body_type {
+                            crate::components::BodyType::BlackHole => 1e16,
+                            crate::components::BodyType::Star => 1.4e3,
+                            crate::components::BodyType::Asteroid => 3000.0,
+                            _ => 5500.0,
+                        };
+                        let radius = ((mass / default_density) / (4.0/3.0 * std::f64::consts::PI)).cbrt();
+                        e.insert(crate::components::spatial::BoundingRadius(radius));
+                        e.insert(crate::components::Force(glam::DVec3::ZERO));
+                        e.insert(crate::components::Acceleration(glam::DVec3::ZERO));
+                        e.insert(crate::components::LinearMomentum(velocity * mass));
+                    }
+                    super::ui::actions::UiAction::ExecuteCommand(cmd) => {
+                        let parts: Vec<&str> = cmd.trim().split_whitespace().collect();
+                        match parts.get(0).copied() {
+                            Some("clear") => {
+                                self.ui_state.console_history.clear();
+                            }
+                            Some("help") => {
+                                self.ui_state.console_history.push("Commands: clear, help".into());
+                            }
+                            Some(_) => {
+                                self.ui_state.console_history.push(format!("Command '{cmd}' not recognized"));
+                            }
+                            None => {}
                         }
                     }
                 }

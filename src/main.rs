@@ -39,6 +39,7 @@ fn main() {
     world.insert_resource(physics::MhdConfig::default());
     world.insert_resource(physics::NfwHaloConfig::default());
     world.insert_resource(crate::gpu::GpuConfig::default());
+    world.insert_resource(crate::core::diagnostics::Diagnostics::default());
 
     // --- GPU Init ---
     let mut init_schedule = Schedule::default();

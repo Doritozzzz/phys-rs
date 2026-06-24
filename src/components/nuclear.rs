@@ -3,7 +3,7 @@
 use bevy_ecs::prelude::*;
 
 /// Tracks the core state of a stellar body for nuclear reactions.
-#[derive(Component, Debug, Clone, PartialEq)]
+#[derive(Component, Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct StellarCore {
     /// Core temperature in Kelvin.
     pub temperature: f64,
@@ -30,7 +30,7 @@ impl Default for StellarCore {
 }
 
 /// The current evolutionary state of a star.
-#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum StellarState {
     /// Hydrogen burning core.
     MainSequence,
@@ -45,7 +45,7 @@ pub enum StellarState {
 }
 
 /// Event triggered when a stellar core collapses (e.g., exceeds Chandrasekhar limit).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct SupernovaEvent {
     /// The entity that collapsed.
     pub entity: Entity,
@@ -55,5 +55,5 @@ pub struct SupernovaEvent {
     pub remnant_type: StellarState,
 }
 
-#[derive(Resource, Default)]
+#[derive(Resource, Default, serde::Serialize, serde::Deserialize)]
 pub struct SupernovaEvents(pub Vec<SupernovaEvent>);

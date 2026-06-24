@@ -4,5 +4,5 @@ use bevy_ecs::prelude::Component;
 ///
 /// Reuses `Mass` and `BoundingRadius` from the same entity for lens parameters.
 /// Zero fields — pure marker.
-#[derive(Component, Debug, Clone, Copy)]
+#[derive(Component, Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
 pub struct GravitationalLens;

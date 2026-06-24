@@ -479,15 +479,25 @@ impl ApplicationHandler for App {
                     time.accumulate(frame_dt)
                 };
 
+                let mut total_physics_dur = std::time::Duration::ZERO;
                 for _ in 0..ticks {
+                    let start = std::time::Instant::now();
                     self.schedule.run(&mut self.world);
+                    total_physics_dur += start.elapsed();
                     if let Some(mut time) = self.world.get_resource_mut::<SimulationTime>() {
                         time.advance_tick();
                     }
                 }
 
+                let start_render = std::time::Instant::now();
                 // Update camera + selection + trails
                 self.render_schedule.run(&mut self.world);
+                let render_dur = start_render.elapsed();
+
+                if let Some(mut diag) = self.world.get_resource_mut::<crate::core::diagnostics::Diagnostics>() {
+                    diag.record("Physics Schedule", total_physics_dur);
+                    diag.record("Render Schedule", render_dur);
+                }
 
                 // Frame timing
                 let ec = self.world.entities().len();

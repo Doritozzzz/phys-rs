@@ -8,4 +8,24 @@ pub enum UiAction {
     ClearSelection,
     /// Solicitud para mover la cámara hacia una entidad concreta.
     FocusCamera(Entity),
+    /// Solicitud para crear una nueva entidad.
+    SpawnEntity {
+        mass: f64,
+        position: glam::DVec3,
+        velocity: glam::DVec3,
+        temperature: f64,
+        body_type: crate::components::BodyType,
+    },
+    /// Comando ingresado en la consola.
+    ExecuteCommand(String),
+    /// Guardado rápido del estado de la simulación.
+    QuickSave,
+    /// Carga rápida del estado de la simulación.
+    QuickLoad,
+    /// Cambiar la velocidad de simulación.
+    SetTimeScale(f64),
+    /// Alternar pausa de la simulación.
+    TogglePause,
+    /// Avanzar un solo tick.
+    StepTick,
 }
