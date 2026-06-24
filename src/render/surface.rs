@@ -5,6 +5,8 @@ use glam::{DMat4, DVec2, DVec3, DVec4};
 use winit::dpi::PhysicalSize;
 use winit::window::Window;
 
+use std::sync::Arc;
+
 use super::bloom::{BloomPipeline, BloomSettings, BloomTextures};
 use super::lensing::{LensingPipeline, LensingSettings, LensingTextures, LensGpuData};
 use super::render_pipeline::{
@@ -12,12 +14,13 @@ use super::render_pipeline::{
     InstanceData, LineVertex, SpherePipeline, LinePipeline, SkyboxPipeline,
 };
 use super::camera::CameraState;
-use super::{RenderScaleMode, ShowVelocityVectors, ShowForceVectors, ShowSectorGrid, ShowTrails, RenderDirectToSwapchain};
+use super::ui::EntityHudData;
+use super::{RenderScaleMode, ShowVelocityVectors, ShowForceVectors, ShowSectorGrid, ShowTrails, RenderDirectToSwapchain, SelectedEntity};
 use crate::components::lensing::GravitationalLens;
 use crate::components::{
     BodyType, BoundingRadius, Mass, Temperature,
     OrbitTrail, Velocity, Force,
-    SmoothedDensity, Pressure,
+    SmoothedDensity, Pressure, EntityName,
 };
 use crate::core::coordinates::{LocalPosition, Sector};
 use crate::core::config::UniverseConfig;
@@ -75,6 +78,11 @@ pub struct RenderContext {
     pub lensing_textures: LensingTextures,
     pub lensing_pipeline: LensingPipeline,
     hdr_format: wgpu::TextureFormat,
+    // ── egui UI ──────────────────────────────────────────────────────────────
+    pub window: Arc<Window>,
+    pub egui_ctx: egui::Context,
+    pub egui_state: egui_winit::State,
+    pub egui_renderer: egui_wgpu::Renderer,
 }
 
 impl RenderContext {
@@ -83,7 +91,7 @@ impl RenderContext {
     /// # Safety
     /// The returned `Surface` is transmuted to `'static`. Caller must ensure
     /// the window outlives this `RenderContext`.
-    pub fn new(window: &Window) -> Self {
+    pub fn new(window: Arc<Window>) -> Self {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::PRIMARY,
             flags: wgpu::InstanceFlags::default(),
@@ -92,7 +100,7 @@ impl RenderContext {
             display: None,
         });
 
-        let surface = instance.create_surface(window).expect("Failed to create wgpu surface");
+        let surface = instance.create_surface(&*window).expect("Failed to create wgpu surface");
 
         // SAFETY: the window is owned by App::window (Arc<Window>), which
         // outlives this RenderContext. RenderContext::drop runs before
@@ -169,6 +177,22 @@ impl RenderContext {
             &bloom_textures.ping_view,
         );
 
+        // ── egui UI init ────────────────────────────────────────────
+        let egui_ctx = egui::Context::default();
+        let egui_state = egui_winit::State::new(
+            egui_ctx.clone(),
+            egui::ViewportId::ROOT,
+            &*window,
+            None,
+            None,
+            None,
+        );
+        let egui_renderer = egui_wgpu::Renderer::new(
+            &device,
+            config.format,
+            egui_wgpu::RendererOptions::default(),
+        );
+
         Self {
             surface,
             device,
@@ -183,6 +207,10 @@ impl RenderContext {
             lensing_textures,
             lensing_pipeline,
             hdr_format,
+            window,
+            egui_ctx,
+            egui_state,
+            egui_renderer,
         }
     }
 
@@ -205,10 +233,14 @@ impl RenderContext {
             &self.bloom_textures.bloom_view,
             &self.bloom_textures.ping_view,
         );
+        let _ = self.egui_state.on_window_event(
+            &*self.window,
+            &winit::event::WindowEvent::Resized(size),
+        );
     }
 
     /// Acquire frame texture, build instance data from ECS, render, and present.
-    pub fn present_frame(&self, world: &mut World) {
+    pub fn present_frame(&mut self, world: &mut World) {
         let frame = match self.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(frame) => frame,
             wgpu::CurrentSurfaceTexture::Suboptimal(frame) => frame,
@@ -287,8 +319,37 @@ impl RenderContext {
 
         // Trail lines collected from OrbitTrail components below
 
-        let _selected = world.get_resource::<super::SelectedEntity>()
-            .map(|s| s.0);
+        // ── Egui UI data: entity list + selected entity HUD ─────────
+        let entity_list: Vec<(Entity, String)> = {
+            let mut query = world.query::<(Entity, &EntityName)>();
+            query.iter(world).map(|(e, n)| (e, n.0.clone())).collect()
+        };
+        let current_selected = world.get_resource::<SelectedEntity>()
+            .map(|s| s.0)
+            .unwrap_or(None);
+
+        let hud_data = current_selected.and_then(|entity| {
+            world.get_entity(entity).ok().and_then(|e| {
+                let name = e.get::<EntityName>().map(|n| n.0.clone()).unwrap_or_default();
+                let mass = e.get::<Mass>().map(|m| m.0);
+                let velocity = e.get::<Velocity>().map(|v| v.0);
+                let temperature = e.get::<Temperature>().map(|t| t.0);
+                let body_type = e.get::<BodyType>().copied();
+                let position = {
+                    let sector = e.get::<Sector>();
+                    let local = e.get::<LocalPosition>();
+                    match (sector, local) {
+                        (Some(s), Some(l)) => Some(DVec3::new(
+                            s.0.x as f64 * ss,
+                            s.0.y as f64 * ss,
+                            s.0.z as f64 * ss,
+                        ) + l.0),
+                        _ => None,
+                    }
+                };
+                Some(EntityHudData { name, mass, velocity, position, temperature, body_type })
+            })
+        });
 
         let direct_to_swapchain = world.get_resource::<RenderDirectToSwapchain>()
             .copied()
@@ -685,8 +746,120 @@ impl RenderContext {
             self.line_pipeline.render(&mut pass, line_vertices.len() as u32);
         }
 
-        // ── Submit and present ─────────────────────────────────────
-        self.queue.submit(std::iter::once(encoder.finish()));
+        // ── Egui UI pass — separate encoder to avoid lifetime issues ──
+        let mut ui_actions = Vec::new();
+        let mut egui_encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("egui_encoder"),
+            });
+        {
+            let egui_input = self.egui_state.take_egui_input(&*self.window);
+            let egui_output = self.egui_ctx.run_ui(egui_input, |ctx| {
+                ui_actions = super::ui::draw_ui(ctx, &entity_list, current_selected, hud_data.as_ref());
+            });
+            let pp = egui_output.pixels_per_point;
+            self.egui_state.handle_platform_output(&*self.window, egui_output.platform_output);
+
+            for action in ui_actions {
+                match action {
+                    super::ui::actions::UiAction::SelectEntity(e) => {
+                        if let Some(mut sel) = world.get_resource_mut::<crate::render::SelectedEntity>() {
+                            sel.0 = Some(e);
+                        }
+                    }
+                    super::ui::actions::UiAction::ClearSelection => {
+                        if let Some(mut sel) = world.get_resource_mut::<crate::render::SelectedEntity>() {
+                            sel.0 = None;
+                        }
+                    }
+                    super::ui::actions::UiAction::FocusCamera(e) => {
+                        if let (Some(local), Some(sector)) = (
+                            world.get::<crate::core::coordinates::LocalPosition>(e),
+                            world.get::<crate::core::coordinates::Sector>(e),
+                        ) {
+                            let config = world.get_resource::<crate::core::config::UniverseConfig>().unwrap();
+                            let ss = config.sector_size;
+                            let world_pos = glam::DVec3::new(
+                                sector.0.x as f64 * ss,
+                                sector.0.y as f64 * ss,
+                                sector.0.z as f64 * ss,
+                            ) + local.0;
+
+                            if let Some(mut camera_mode) = world.get_resource_mut::<crate::render::CameraMode>() {
+                                match &mut *camera_mode {
+                                    crate::render::CameraMode::FreeFly(_) => {
+                                        *camera_mode = crate::render::CameraMode::Orbital(crate::render::OrbitalCamera {
+                                            target: world_pos,
+                                            ..Default::default()
+                                        });
+                                    }
+                                    crate::render::CameraMode::Orbital(o) => {
+                                        o.target = world_pos;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            for (id, image_delta) in &egui_output.textures_delta.set {
+                self.egui_renderer.update_texture(&self.device, &self.queue, *id, image_delta);
+            }
+
+            let clipped_meshes = self.egui_ctx.tessellate(egui_output.shapes, pp);
+
+            let screen_descriptor = egui_wgpu::ScreenDescriptor {
+                size_in_pixels: [self.config.width, self.config.height],
+                pixels_per_point: pp,
+            };
+
+            // egui_wgpu requires RenderPass<'static>. The encoder lives on the
+            // stack for the full pass — transmute is sound here.
+            self.egui_renderer.update_buffers(
+                &self.device,
+                &self.queue,
+                &mut egui_encoder,
+                &clipped_meshes,
+                &screen_descriptor,
+            );
+
+            let egui_encoder_static: &'static mut wgpu::CommandEncoder =
+                unsafe { std::mem::transmute(&mut egui_encoder) };
+            let mut pass = egui_encoder_static.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("egui_pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &frame_view,
+                    resolve_target: None,
+                    depth_slice: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                multiview_mask: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+            self.egui_renderer.render(
+                &mut pass,
+                &clipped_meshes,
+                &screen_descriptor,
+            );
+            drop(pass);
+
+            for id in &egui_output.textures_delta.free {
+                self.egui_renderer.free_texture(id);
+            }
+        }
+
+        // ── Submit encoders and present ─────────────────────────────
+        self.queue.submit([
+            encoder.finish(),
+            egui_encoder.finish(),
+        ]);
         frame.present();
     }
 }

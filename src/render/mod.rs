@@ -8,6 +8,7 @@ pub mod camera;
 pub mod lensing;
 pub mod render_pipeline;
 pub mod surface;
+pub mod ui;
 
 use std::sync::Arc;
 use std::time::Instant;
@@ -212,7 +213,7 @@ impl ApplicationHandler for App {
                 )
                 .expect("Failed to create window"),
         );
-        let render_state = RenderContext::new(&window);
+        let render_state = RenderContext::new(window.clone());
         self.window = Some(window);
         self.render_state = Some(render_state);
         self.last_frame_time = Some(Instant::now());
@@ -224,6 +225,32 @@ impl ApplicationHandler for App {
         _window_id: WindowId,
         event: WindowEvent,
     ) {
+        // ── Forward events to egui (consumes if pointer is over UI) ─
+        let mut egui_consumed = match &event {
+            WindowEvent::KeyboardInput { .. }
+            | WindowEvent::MouseInput { .. }
+            | WindowEvent::CursorMoved { .. }
+            | WindowEvent::MouseWheel { .. } => {
+                self.render_state.as_mut().map(|rs| {
+                    rs.egui_state.on_window_event(&*rs.window, &event).consumed
+                }).unwrap_or(false)
+            }
+            _ => false,
+        };
+
+        if let Some(rs) = &self.render_state {
+            if rs.egui_ctx.is_pointer_over_area() || rs.egui_ctx.wants_pointer_input() {
+                if matches!(event, WindowEvent::MouseInput { .. } | WindowEvent::CursorMoved { .. } | WindowEvent::MouseWheel { .. }) {
+                    egui_consumed = true;
+                }
+            }
+        }
+
+        if egui_consumed {
+            self.window.as_ref().map(|w| w.request_redraw());
+            return;
+        }
+
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),
             WindowEvent::Resized(size) => {
@@ -476,7 +503,7 @@ impl ApplicationHandler for App {
                 }
 
                 // Present frame
-                if let Some(rs) = &self.render_state {
+                if let Some(rs) = &mut self.render_state {
                     rs.present_frame(&mut self.world);
                 }
             }
