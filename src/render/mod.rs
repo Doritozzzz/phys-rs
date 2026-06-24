@@ -247,6 +247,14 @@ impl ApplicationHandler for App {
         }
 
         if egui_consumed {
+            // Keep cursor position updated to prevent huge deltas when exiting UI
+            if let WindowEvent::CursorMoved { position, .. } = &event {
+                if let Some(mut input) = self.world.get_resource_mut::<CameraInput>() {
+                    input.cursor_x = position.x;
+                    input.cursor_y = position.y;
+                    input.cursor_initialized = true;
+                }
+            }
             self.window.as_ref().map(|w| w.request_redraw());
             return;
         }
@@ -583,15 +591,18 @@ fn selection_system(
         println!("→ Selected entity {} at [{:.3e}, {:.3e}, {:.3e}]",
             entity.index(), world_pos.x, world_pos.y, world_pos.z);
 
+        let target_radius = entities.get(entity).map(|(_, _, _, r)| r.0).unwrap_or(10.0);
         match &mut *camera_mode {
             CameraMode::FreeFly(_) => {
                 *camera_mode = CameraMode::Orbital(OrbitalCamera {
                     target: world_pos,
+                    distance: target_radius * 3.0,
                     ..Default::default()
                 });
             }
             CameraMode::Orbital(o) => {
                 o.target = world_pos;
+                o.distance = target_radius * 3.0;
             }
         }
     } else {

@@ -786,16 +786,19 @@ impl RenderContext {
                                 sector.0.z as f64 * ss,
                             ) + local.0;
 
+                            let target_radius = world.get::<crate::components::spatial::BoundingRadius>(e).map(|r| r.0).unwrap_or(10.0);
                             if let Some(mut camera_mode) = world.get_resource_mut::<crate::render::CameraMode>() {
                                 match &mut *camera_mode {
                                     crate::render::CameraMode::FreeFly(_) => {
                                         *camera_mode = crate::render::CameraMode::Orbital(crate::render::OrbitalCamera {
                                             target: world_pos,
+                                            distance: target_radius * 3.0,
                                             ..Default::default()
                                         });
                                     }
                                     crate::render::CameraMode::Orbital(o) => {
                                         o.target = world_pos;
+                                        o.distance = target_radius * 3.0;
                                     }
                                 }
                             }

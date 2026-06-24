@@ -147,7 +147,7 @@ pub(crate) fn update_free_fly(cam: &mut FreeFlyCamera, time: &crate::core::Simul
     let dt = time.dt;
 
     cam.yaw -= input.mouse_delta_x * cam.sensitivity;
-    cam.pitch += input.mouse_delta_y * cam.sensitivity;
+    cam.pitch -= input.mouse_delta_y * cam.sensitivity;
     cam.pitch = cam.pitch.clamp(-1.5, 1.5);
 
     if input.scroll_delta != 0.0 {
@@ -179,7 +179,7 @@ pub(crate) fn update_free_fly(cam: &mut FreeFlyCamera, time: &crate::core::Simul
 pub(crate) fn update_orbital(cam: &mut OrbitalCamera, input: &CameraInput, state: &mut CameraState) {
     if input.left_mouse {
         cam.theta -= input.mouse_delta_x * cam.sensitivity;
-        cam.phi += input.mouse_delta_y * cam.sensitivity;
+        cam.phi -= input.mouse_delta_y * cam.sensitivity;
         cam.phi = cam.phi.clamp(0.01, std::f64::consts::PI - 0.01);
     }
 
