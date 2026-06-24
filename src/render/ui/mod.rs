@@ -20,7 +20,6 @@ pub struct EntityHudData {
 }
 
 /// Estado persistente de la UI
-#[derive(Default)]
 pub struct UiState {
     pub energy_history: std::collections::VecDeque<(f64, f64, f64, f64)>, // (time, kinetic, potential, total)
     pub current_time: f64,
@@ -38,6 +37,34 @@ pub struct UiState {
     pub show_profiler: bool,
     // Graph state
     pub show_energy_graph: bool,
+    // Time Control
+    pub show_time_control: bool,
+    // Serialization
+    pub show_serialization: bool,
+    // Speed slider value (synced with SimulationTime.speed_multiplier)
+    pub time_scale: f64,
+}
+
+impl Default for UiState {
+    fn default() -> Self {
+        Self {
+            energy_history: std::collections::VecDeque::new(),
+            current_time: 0.0,
+            console_input: String::new(),
+            console_history: Vec::new(),
+            show_console: false,
+            spawner_mass_log: 0.0,
+            spawner_vel: [0.0; 3],
+            spawner_temp: 5000.0,
+            spawner_type: BodyType::default(),
+            show_spawner: false,
+            show_profiler: false,
+            show_energy_graph: false,
+            show_time_control: true,
+            show_serialization: false,
+            time_scale: 1.0,
+        }
+    }
 }
 
 /// Dibuja la UI y devuelve las acciones que el usuario realizó este frame.
@@ -61,9 +88,11 @@ pub fn draw_ui(
     // Top menu bar to toggle windows
     egui::TopBottomPanel::top("top_menu").show(ctx, |ui| {
         ui.horizontal(|ui| {
+            ui.toggle_value(&mut state.show_time_control, "Time Control");
             ui.toggle_value(&mut state.show_energy_graph, "Energy Graph");
             ui.toggle_value(&mut state.show_spawner, "Spawner");
             ui.toggle_value(&mut state.show_console, "Console");
+            ui.toggle_value(&mut state.show_serialization, "World State");
             ui.toggle_value(&mut state.show_profiler, "Profiler");
         });
     });

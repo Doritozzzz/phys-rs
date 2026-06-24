@@ -9,6 +9,7 @@ pub fn draw(ctx: &Context, state: &mut UiState, diagnostics: Option<&Diagnostics
 
     Window::new("Profiler")
         .open(&mut state.show_profiler)
+        .default_pos([400.0, 500.0])
         .show(ctx, |ui| {
             ui.label("System Execution Times (ms):");
             if let Some(diag) = diagnostics {

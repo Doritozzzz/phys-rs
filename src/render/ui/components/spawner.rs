@@ -11,6 +11,7 @@ pub fn draw(ctx: &Context, state: &mut UiState, actions: &mut Vec<UiAction>) {
 
     Window::new("Entity Spawner")
         .open(&mut state.show_spawner)
+        .default_pos([800.0, 250.0])
         .show(ctx, |ui| {
             ui.add(Slider::new(&mut state.spawner_mass_log, -5.0..=35.0).text("Log10 Mass"));
             let mass = 10_f64.powf(state.spawner_mass_log as f64);

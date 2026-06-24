@@ -24,6 +24,7 @@ pub fn draw(ctx: &Context, state: &mut UiState, energy_data: &EnergyMonitor) {
 
     Window::new("Energy Monitor")
         .open(&mut state.show_energy_graph)
+        .default_pos([800.0, 20.0])
         .show(ctx, |ui| {
             let kinetic: PlotPoints = state.energy_history.iter()
                 .map(|&(t, k, _, _)| [t, k])

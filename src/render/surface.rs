@@ -835,20 +835,20 @@ impl RenderContext {
                     super::ui::actions::UiAction::TogglePause => {
                         if let Some(mut t) = world.get_resource_mut::<crate::core::SimulationTime>() {
                             t.paused = !t.paused;
+                            println!("→ Simulation {}", if t.paused { "paused" } else { "resumed" });
                             self.ui_state.console_history.push(format!("Simulation {}", if t.paused { "paused" } else { "resumed" }));
                         }
                     }
                     super::ui::actions::UiAction::StepTick => {
-                        if let Some(mut t) = world.get_resource_mut::<crate::core::SimulationTime>() {
-                            t.paused = true;
-                            // Step exactly one tick. We can do this by setting accumulator.
-                            t.accumulator += t.dt;
+                        if let Some(mut r) = world.get_resource_mut::<crate::render::StepRequested>() {
+                            r.0 = true;
                         }
                     }
                     super::ui::actions::UiAction::SetTimeScale(scale) => {
                         if let Some(mut t) = world.get_resource_mut::<crate::core::SimulationTime>() {
                             t.speed_multiplier = scale;
                         }
+                        self.ui_state.time_scale = scale;
                     }
                     super::ui::actions::UiAction::QuickSave => {
                         let mut saved_sim = crate::core::serialization::SavedSimulation { entities: Vec::new() };

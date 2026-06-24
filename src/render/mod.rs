@@ -135,6 +135,10 @@ impl Default for RenderDirectToSwapchain {
     fn default() -> Self { Self(false) }
 }
 
+/// Step requested by UI StepTick button. Consumed once per frame.
+#[derive(Resource, Default)]
+pub struct StepRequested(pub bool);
+
 // ── App ───────────────────────────────────────────────────────────────────
 
 /// Top-level sandbox application.
@@ -179,6 +183,7 @@ impl App {
         world.init_resource::<BloomSettings>();
         world.init_resource::<LensingSettings>();
         world.init_resource::<RenderDirectToSwapchain>();
+        world.init_resource::<StepRequested>();
 
         let mut render_schedule = Schedule::default();
         render_schedule.add_systems(camera::camera_system);
@@ -475,8 +480,18 @@ impl ApplicationHandler for App {
                 self.last_frame_time = Some(now);
 
                 let ticks = {
+                    let step_requested = {
+                        let mut step = self.world.get_resource_mut::<StepRequested>().unwrap();
+                        let requested = step.0;
+                        step.0 = false;
+                        requested
+                    };
                     let mut time = self.world.get_resource_mut::<SimulationTime>().unwrap();
-                    time.accumulate(frame_dt)
+                    if step_requested {
+                        1
+                    } else {
+                        time.accumulate(frame_dt)
+                    }
                 };
 
                 let mut total_physics_dur = std::time::Duration::ZERO;

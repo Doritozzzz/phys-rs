@@ -9,6 +9,7 @@ pub fn draw(ctx: &Context, state: &mut UiState, actions: &mut Vec<UiAction>) {
 
     Window::new("Console")
         .open(&mut state.show_console)
+        .default_pos([400.0, 300.0])
         .show(ctx, |ui| {
             ScrollArea::vertical().max_height(200.0).show(ui, |ui| {
                 for line in &state.console_history {
