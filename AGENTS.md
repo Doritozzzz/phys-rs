@@ -24,6 +24,11 @@ Read these before modifying code:
 
 When finishing a task, update `docs/BACKLOG.md` marking what was done.
 
+## Codebase Exploration
+
+- **MANDATORY**: Use CodeGraph (`codegraph_explore`, `codegraph_node` MCP tools or `codegraph explore` CLI) to explore the codebase.
+- **DO NOT** use alternative methods like `grep`, `find`, or manual file reading as the primary way to locate symbols or understand code architecture.
+
 ## Project Layout
 
 ```
